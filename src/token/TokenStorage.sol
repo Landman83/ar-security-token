@@ -3,7 +3,7 @@
 
 pragma solidity ^0.8.17;
 import "../compliance/modular/IModularCompliance.sol";
-import "../registry/interface/IIdentityRegistry.sol";
+
 
 contract TokenStorage {
     /// @dev ERC20 basic variables

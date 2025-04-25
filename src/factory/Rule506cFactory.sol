@@ -3,21 +3,12 @@ pragma solidity ^0.8.17;
 
 import "../roles/AgentRole.sol";
 import "../token/IToken.sol";
-import "../registry/interface/IClaimTopicsRegistry.sol";
-import "../registry/interface/IIdentityRegistry.sol";
 import "../compliance/modular/IModularCompliance.sol";
 import "../compliance/modular/modules/IModule.sol";
-import "../registry/interface/ITrustedIssuersRegistry.sol";
-import "../registry/interface/IIdentityRegistryStorage.sol";
 import "../proxy/authority/ITREXImplementationAuthority.sol";
 import "../proxy/TokenProxy.sol";
-import "../proxy/ClaimTopicsRegistryProxy.sol";
-import "../proxy/IdentityRegistryProxy.sol";
-import "../proxy/IdentityRegistryStorageProxy.sol";
-import "../proxy/TrustedIssuersRegistryProxy.sol";
 import "../proxy/ModularComplianceProxy.sol";
 import "./ITREXFactory.sol";
-import "@onchain-id/solidity/contracts/factory/IIdFactory.sol";
 
 /**
  * @title Rule506cFactory

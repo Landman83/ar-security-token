@@ -3,7 +3,6 @@
 pragma solidity ^0.8.17;
 
 import "../compliance/modular/IModularCompliance.sol";
-import "../registry/interface/IIdentityRegistry.sol";
 
 interface IToken {
     // ERC20 standard events
