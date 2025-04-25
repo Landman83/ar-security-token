@@ -11,7 +11,6 @@ import "../proxy/ModularComplianceProxy.sol";
 import "./ITREXFactory.sol";
 import "../../lib/st-identity-registry/src/interfaces/IAttributeRegistry.sol";
 
-
 /**
  * @title AccreditedInvestorTokenFactory
  * @dev An updated factory for deploying tokens that use the attribute registry for compliance
@@ -19,8 +18,6 @@ import "../../lib/st-identity-registry/src/interfaces/IAttributeRegistry.sol";
 contract AccreditedInvestorTokenFactory is Ownable {
     /// the address of the implementation authority contract used in the tokens deployed by the factory
     address private _implementationAuthority;
-
-    // No longer using identities
 
     /// mapping containing info about the token contracts corresponding to salt already used for CREATE2 deployments
     mapping(string => address) public tokenDeployed;
@@ -78,7 +75,7 @@ contract AccreditedInvestorTokenFactory is Ownable {
         emit ComponentDeployed("MC", mcAddress);
         IModularCompliance mc = IModularCompliance(mcAddress);
 
-        // Deploy token without onchain ID (will be created later)
+        // Deploy token
         IToken token = IToken(_deployToken(
             _salt,
             _implementationAuthority,
@@ -87,10 +84,8 @@ contract AccreditedInvestorTokenFactory is Ownable {
             _name,
             _symbol,
             _decimals,
-            address(0) // No ONCHAINID yet
+            address(0) // No ONCHAINID needed
         ));
-
-        // No token identity creation - we're not using identities anymore
         
         // Setup token
         AgentRole(address(token)).addAgent(_owner);
@@ -145,8 +140,6 @@ contract AccreditedInvestorTokenFactory is Ownable {
         return _implementationAuthority;
     }
 
-    // No longer need ID factory getter
-
     /**
      * @dev Get token address for a given salt
      */
@@ -167,8 +160,6 @@ contract AccreditedInvestorTokenFactory is Ownable {
         _implementationAuthority = implementationAuthority_;
         emit ImplementationAuthoritySet(implementationAuthority_);
     }
-
-    // No longer need ID factory setter
 
     /// deploy function with create2 opcode call
     /// returns the address of the contract created
