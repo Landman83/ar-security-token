@@ -1,19 +1,56 @@
-## Foundry
+# Security Token (AR-ST)
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+This repository contains a Solidity implementation of a security token system using attribute registry-based compliance.
 
-Foundry consists of:
+## Architecture
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+- **SecurityToken**: The main token contract implementing ERC-20 compatible security token
+- **ModularCompliance**: System to enforce transfer restrictions through compliance modules
+- **Implementation Authority**: Central registry that manages implementations
+- **SecurityTokenFactory**: Factory to deploy new token instances via proxies
 
-## Documentation
+### Key Components
 
-https://book.getfoundry.sh/
+- **Proxy Pattern**: System uses proxy contracts for upgradeability
+- **Compliance Modules**: Pluggable modules like AccreditedInvestor and Lockup
+- **Attribute Registry**: External registry for storing investor attributes
 
-## Usage
+## Setup
+
+### Prerequisites
+
+- [Foundry](https://book.getfoundry.sh/getting-started/installation)
+- Node.js and npm (for JS scripts)
+
+### Installation
+
+```bash
+# Clone the repository
+git clone <repo-url>
+cd ar-st
+
+# Install dependencies
+forge install
+```
+
+### Configuration
+
+Create a `.env` file based on `.env.example`:
+
+```
+# Deployment Configuration
+DEPLOYER_ADDRESS=0x...
+DEPLOYER_PRIVATE_KEY=0x...
+CHAIN_ID=1
+ATTRIBUTE_REGISTRY_ADDRESS=0x...
+
+# Token Configuration
+TOKEN_NAME="Security Token"
+TOKEN_SYMBOL="STKN"
+TOKEN_DECIMALS=18
+```
+
+## Development
 
 ### Build
 
@@ -33,34 +70,38 @@ $ forge test
 $ forge fmt
 ```
 
-### Gas Snapshots
+## Deployment
 
-```shell
-$ forge snapshot
+The deployment scripts are organized into modular components to avoid contract size limitations:
+
+1. `Deploy_Implementations.s.sol`: Deploys token and compliance implementations
+2. `Deploy_Authority.s.sol`: Deploys implementation authority
+3. `Deploy_Modules.s.sol`: Deploys compliance modules
+4. `Deploy_Factory.s.sol`: Deploys security token factory
+5. `DeployToken.s.sol`: Deploys an individual token
+
+### Deploy All Components
+
+```bash
+forge script script/DeployAll.s.sol --rpc-url $RPC_URL --broadcast
 ```
 
-### Anvil
+Or using the local node:
 
-```shell
-$ anvil
+```bash
+forge script script/DeployAll.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
 ```
 
-### Deploy
+### Deploy Individual Token
 
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+```bash
+forge script script/DeployToken.s.sol --rpc-url $RPC_URL --broadcast
 ```
 
-### Cast
+## Foundry Documentation
 
-```shell
-$ cast <subcommand>
-```
+https://book.getfoundry.sh/
 
-### Help
+## License
 
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+This project is licensed under GPL-3.0.
