@@ -3,6 +3,7 @@
 pragma solidity ^0.8.17;
 
 import "../compliance/modular/IModularCompliance.sol";
+import "../../lib/st-identity-registry/src/interfaces/IAttributeRegistry.sol";
 
 interface IToken {
     // ERC20 standard events
@@ -200,10 +201,10 @@ interface IToken {
     function getRegisteredSTOs() external view returns (address[] memory);
 
     /**
-     *  @dev returns the Identity Registry linked to the token
-     *  @return the address of the Identity Registry
+     *  @dev returns the Attribute Registry linked to the token
+     *  @return the address of the Attribute Registry
      */
-    function identityRegistry() external view returns (IIdentityRegistry);
+    function attributeRegistry() external view returns (IAttributeRegistry);
 
     /**
      *  @dev returns compliance contract address of the token
@@ -291,12 +292,12 @@ interface IToken {
     function setOnchainID(address _onchainID) external;
 
     /**
-     *  @dev sets the Identity Registry for the token
-     *  @param _identityRegistry the address of the Identity Registry to set
+     *  @dev sets the Attribute Registry for the token
+     *  @param _attributeRegistry the address of the Attribute Registry to set
      *  Only the owner of the token smart contract can call this function
-     *  emits an `IdentityRegistryAdded` event
+     *  emits an `AttributeRegistryAdded` event
      */
-    function setIdentityRegistry(address _identityRegistry) external;
+    function setAttributeRegistry(address _attributeRegistry) external;
 
     /**
      *  @dev sets the compliance contract of the token
@@ -334,11 +335,11 @@ interface IToken {
     event UpdatedTokenInformation(string _newName, string _newSymbol, uint8 _newDecimals, string _newVersion, address _newOnchainID);
 
     /**
-     *  this event is emitted when the IdentityRegistry has been set for the token
-     *  the event is emitted by the token constructor and by the setIdentityRegistry function
-     *  `_identityRegistry` is the address of the Identity Registry of the token
+     *  this event is emitted when the AttributeRegistry has been set for the token
+     *  the event is emitted by the token constructor and by the setAttributeRegistry function
+     *  `_attributeRegistry` is the address of the Attribute Registry of the token
      */
-    event IdentityRegistryAdded(address indexed _identityRegistry);
+    event AttributeRegistryAdded(address indexed _attributeRegistry);
 
     /**
      *  this event is emitted when the Compliance has been set for the token

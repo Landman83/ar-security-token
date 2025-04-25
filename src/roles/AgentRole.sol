@@ -6,14 +6,13 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "./Roles.sol";
 
-contract AgentRole is Ownable {
+abstract contract AgentRole is Ownable {
     using Roles for Roles.Role;
 
     Roles.Role private _agents;
 
-    constructor() {
-        // Ownable's constructor is called automatically and sets msg.sender as owner
-    }
+    // Must be passed initialOwner in derived contracts
+    constructor() {}
 
     event AgentAdded(address indexed _agent);
     event AgentRemoved(address indexed _agent);

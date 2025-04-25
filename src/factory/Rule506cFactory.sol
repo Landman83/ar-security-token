@@ -9,32 +9,30 @@ import "../proxy/authority/ITREXImplementationAuthority.sol";
 import "../proxy/TokenProxy.sol";
 import "../proxy/ModularComplianceProxy.sol";
 import "./ITREXFactory.sol";
+import "../../lib/st-identity-registry/src/interfaces/IAttributeRegistry.sol";
+
 
 /**
- * @title Rule506cFactory
- * @dev A slimmed down version of TREXFactory specifically for Rule 506c tokens
- * This factory omits action modules integration to avoid contract size limitations
+ * @title AccreditedInvestorTokenFactory
+ * @dev An updated factory for deploying tokens that use the attribute registry for compliance
  */
-contract Rule506cFactory is Ownable {
+contract AccreditedInvestorTokenFactory is Ownable {
     /// the address of the implementation authority contract used in the tokens deployed by the factory
     address private _implementationAuthority;
 
-    /// the address of the Identity Factory used to deploy token OIDs
-    address private _idFactory;
+    // No longer using identities
 
     /// mapping containing info about the token contracts corresponding to salt already used for CREATE2 deployments
     mapping(string => address) public tokenDeployed;
 
     /// Events
     event Deployed(address indexed _addr);
-    event IdFactorySet(address _idFactory);
     event ImplementationAuthoritySet(address _implementationAuthority);
-    event Rule506cTokenDeployed(address indexed _token, address _ir, address _irs, address _tir, address _ctr, address _mc, string indexed _salt);
+    event TokenDeployed(address indexed _token, address _attributeRegistry, address _mc, string indexed _salt);
 
-    /// constructor is setting the implementation authority and the Identity Factory of the TREX factory
-    constructor(address implementationAuthority_, address idFactory_) {
+    /// constructor is setting the implementation authority
+    constructor(address implementationAuthority_) Ownable(msg.sender) {
         setImplementationAuthority(implementationAuthority_);
-        setIdFactory(idFactory_);
     }
 
     // Events to help with debugging
@@ -49,60 +47,42 @@ contract Rule506cFactory is Ownable {
     event ComponentDeployed(string componentName, address componentAddress);
 
     /**
-     * @dev Deploys a Rule 506c compliant token suite
-     * This version does not include action modules to avoid contract size limitations
+     * @dev Deploys a token that uses the attribute registry for compliance
      * @param _salt The salt for CREATE2 deployment
      * @param _name Token name
      * @param _symbol Token symbol
      * @param _decimals Token decimals
      * @param _owner Token owner
+     * @param _attributeRegistry Address of the attribute registry to use
      * @param _complianceModules Array of compliance module addresses (optional)
      */
-    function deployRule506cToken(
+    function deployToken(
         string memory _salt, 
         string memory _name,
         string memory _symbol,
         uint8 _decimals,
         address _owner,
+        address _attributeRegistry,
         address[] memory _complianceModules
     ) external onlyOwner {
         require(tokenDeployed[_salt] == address(0), "token already deployed");
         require(_owner != address(0), "invalid owner address");
+        require(_attributeRegistry != address(0), "invalid attribute registry address");
         
         // Emit event for debugging
         emit DeploymentStarted(_salt, _name, _symbol, _decimals, _owner, _complianceModules);
-
-        // Deploy TREX components
-        emit ComponentDeployed("Starting TIR deployment", address(0));
-        address tirAddress = _deployTIR(_salt, _implementationAuthority);
-        emit ComponentDeployed("TIR", tirAddress);
-        ITrustedIssuersRegistry tir = ITrustedIssuersRegistry(tirAddress);
         
-        emit ComponentDeployed("Starting CTR deployment", address(0));
-        address ctrAddress = _deployCTR(_salt, _implementationAuthority);
-        emit ComponentDeployed("CTR", ctrAddress);
-        IClaimTopicsRegistry ctr = IClaimTopicsRegistry(ctrAddress);
-        
+        // Deploy ModularCompliance
         emit ComponentDeployed("Starting MC deployment", address(0));
         address mcAddress = _deployMC(_salt, _implementationAuthority);
         emit ComponentDeployed("MC", mcAddress);
         IModularCompliance mc = IModularCompliance(mcAddress);
-        
-        emit ComponentDeployed("Starting IRS deployment", address(0));
-        address irsAddress = _deployIRS(_salt, _implementationAuthority);
-        emit ComponentDeployed("IRS", irsAddress);
-        IIdentityRegistryStorage irs = IIdentityRegistryStorage(irsAddress);
-        
-        emit ComponentDeployed("Starting IR deployment", address(0));
-        address irAddress = _deployIR(_salt, _implementationAuthority, address(tir), address(ctr), address(irs));
-        emit ComponentDeployed("IR", irAddress);
-        IIdentityRegistry ir = IIdentityRegistry(irAddress);
 
         // Deploy token without onchain ID (will be created later)
         IToken token = IToken(_deployToken(
             _salt,
             _implementationAuthority,
-            address(ir),
+            _attributeRegistry,
             address(mc),
             _name,
             _symbol,
@@ -110,17 +90,7 @@ contract Rule506cFactory is Ownable {
             address(0) // No ONCHAINID yet
         ));
 
-        // Create token identity
-        address tokenID = IIdFactory(_idFactory).createTokenIdentity(address(token), _owner, _salt);
-        token.setOnchainID(tokenID);
-
-        // Setup claim topics for Rule 506c - requires KYC
-        ctr.addClaimTopic(7); // KYC claim topic
-
-        // Setup identity registry
-        irs.bindIdentityRegistry(address(ir));
-        AgentRole(address(ir)).addAgent(address(token));
-        AgentRole(address(ir)).addAgent(_owner);
+        // No token identity creation - we're not using identities anymore
         
         // Setup token
         AgentRole(address(token)).addAgent(_owner);
@@ -137,7 +107,6 @@ contract Rule506cFactory is Ownable {
                     mc.addModule(_complianceModules[i]);
                     
                     // Initialize modules via callModuleFunction if needed
-                    // This handles both KYC and Lockup modules which need initialization
                     bytes memory initializeFunctionCall = abi.encodeWithSignature("initializeModule(address)", address(mc));
                     
                     // Using try/catch with low-level call to handle modules that might not have this function
@@ -152,19 +121,14 @@ contract Rule506cFactory is Ownable {
             }
         }
         
-        // ModularComplianceProxy initializes itself during deployment
-        
         // Register the deployed token
         tokenDeployed[_salt] = address(token);
         
-        // Transfer ownership of all contracts to the specified owner
+        // Transfer ownership of contracts to the specified owner
         (Ownable(address(token))).transferOwnership(_owner);
-        (Ownable(address(ir))).transferOwnership(_owner);
-        (Ownable(address(tir))).transferOwnership(_owner);
-        (Ownable(address(ctr))).transferOwnership(_owner);
         (Ownable(address(mc))).transferOwnership(_owner);
         
-        emit Rule506cTokenDeployed(address(token), address(ir), address(irs), address(tir), address(ctr), address(mc), _salt);
+        emit TokenDeployed(address(token), _attributeRegistry, address(mc), _salt);
     }
 
     /**
@@ -181,12 +145,7 @@ contract Rule506cFactory is Ownable {
         return _implementationAuthority;
     }
 
-    /**
-     * @dev Get the ID factory address
-     */
-    function getIdFactory() external view returns(address) {
-        return _idFactory;
-    }
+    // No longer need ID factory getter
 
     /**
      * @dev Get token address for a given salt
@@ -200,27 +159,16 @@ contract Rule506cFactory is Ownable {
      */
     function setImplementationAuthority(address implementationAuthority_) public onlyOwner {
         require(implementationAuthority_ != address(0), "invalid argument - zero address");
-        // should not be possible to set an implementation authority that is not complete
+        // Ensure the implementation authority has token and modular compliance implementations
         require(
-            (ITREXImplementationAuthority(implementationAuthority_)).getTokenImplementation() != address(0)
-            && (ITREXImplementationAuthority(implementationAuthority_)).getCTRImplementation() != address(0)
-            && (ITREXImplementationAuthority(implementationAuthority_)).getIRImplementation() != address(0)
-            && (ITREXImplementationAuthority(implementationAuthority_)).getIRSImplementation() != address(0)
-            && (ITREXImplementationAuthority(implementationAuthority_)).getMCImplementation() != address(0)
-            && (ITREXImplementationAuthority(implementationAuthority_)).getTIRImplementation() != address(0),
+            (ITREXImplementationAuthority(implementationAuthority_)).getTokenImplementation() != address(0) &&
+            (ITREXImplementationAuthority(implementationAuthority_)).getMCImplementation() != address(0),
             "invalid Implementation Authority");
         _implementationAuthority = implementationAuthority_;
         emit ImplementationAuthoritySet(implementationAuthority_);
     }
 
-    /**
-     * @dev Set the ID factory
-     */
-    function setIdFactory(address idFactory_) public onlyOwner {
-        require(idFactory_ != address(0), "invalid argument - zero address");
-        _idFactory = idFactory_;
-        emit IdFactorySet(idFactory_);
-    }
+    // No longer need ID factory setter
 
     /// deploy function with create2 opcode call
     /// returns the address of the contract created
@@ -240,34 +188,8 @@ contract Rule506cFactory is Ownable {
         return addr;
     }
 
-    /// function used to deploy a trusted issuers registry using CREATE2
-    function _deployTIR
-    (
-        string memory _salt,
-        address implementationAuthority_
-    ) private returns (address){
-        bytes memory _code = type(TrustedIssuersRegistryProxy).creationCode;
-        require(implementationAuthority_ != address(0), "TIR deploy: implementation authority cannot be zero");
-        bytes memory _constructData = abi.encode(implementationAuthority_);
-        bytes memory bytecode = abi.encodePacked(_code, _constructData);
-        return _deploy(_salt, bytecode);
-    }
-
-    /// function used to deploy a claim topics registry using CREATE2
-    function  _deployCTR
-    (
-        string memory _salt,
-        address implementationAuthority_
-    ) private returns (address) {
-        bytes memory _code = type(ClaimTopicsRegistryProxy).creationCode;
-        bytes memory _constructData = abi.encode(implementationAuthority_);
-        bytes memory bytecode = abi.encodePacked(_code, _constructData);
-        return _deploy(_salt, bytecode);
-    }
-
     /// function used to deploy modular compliance contract using CREATE2
-    function  _deployMC
-    (
+    function _deployMC(
         string memory _salt,
         address implementationAuthority_
     ) private returns (address) {
@@ -277,45 +199,11 @@ contract Rule506cFactory is Ownable {
         return _deploy(_salt, bytecode);
     }
 
-    /// function used to deploy an identity registry storage using CREATE2
-    function _deployIRS
-    (
-        string memory _salt,
-        address implementationAuthority_
-    ) private returns (address) {
-        bytes memory _code = type(IdentityRegistryStorageProxy).creationCode;
-        bytes memory _constructData = abi.encode(implementationAuthority_);
-        bytes memory bytecode = abi.encodePacked(_code, _constructData);
-        return _deploy(_salt, bytecode);
-    }
-
-    /// function used to deploy an identity registry using CREATE2
-    function _deployIR
-    (
-        string memory _salt,
-        address implementationAuthority_,
-        address _trustedIssuersRegistry,
-        address _claimTopicsRegistry,
-        address _identityStorage
-    ) private returns (address) {
-        bytes memory _code = type(IdentityRegistryProxy).creationCode;
-        bytes memory _constructData = abi.encode
-        (
-            implementationAuthority_,
-            _trustedIssuersRegistry,
-            _claimTopicsRegistry,
-            _identityStorage
-        );
-        bytes memory bytecode = abi.encodePacked(_code, _constructData);
-        return _deploy(_salt, bytecode);
-    }
-
     /// function used to deploy a token using CREATE2
-    function _deployToken
-    (
+    function _deployToken(
         string memory _salt,
         address implementationAuthority_,
-        address _identityRegistry,
+        address _attributeRegistry,
         address _compliance,
         string memory _name,
         string memory _symbol,
@@ -323,10 +211,9 @@ contract Rule506cFactory is Ownable {
         address _onchainId
     ) private returns (address) {
         bytes memory _code = type(TokenProxy).creationCode;
-        bytes memory _constructData = abi.encode
-        (
+        bytes memory _constructData = abi.encode(
             implementationAuthority_,
-            _identityRegistry,
+            _attributeRegistry,
             _compliance,
             _name,
             _symbol,

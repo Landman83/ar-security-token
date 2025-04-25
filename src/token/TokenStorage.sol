@@ -3,6 +3,7 @@
 
 pragma solidity ^0.8.17;
 import "../compliance/modular/IModularCompliance.sol";
+import "../../lib/st-identity-registry/src/interfaces/IAttributeRegistry.sol";
 
 
 contract TokenStorage {
@@ -24,10 +25,10 @@ contract TokenStorage {
 
     bool internal _tokenPaused = false;
 
-    /// @dev Identity Registry contract used by the onchain validator system
-    IIdentityRegistry internal _tokenIdentityRegistry;
+    /// @dev Attribute Registry contract used for compliance checks
+    IAttributeRegistry internal _tokenAttributeRegistry;
 
-    /// @dev Compliance contract linked to the onchain validator system
+    /// @dev Compliance contract linked to the compliance system
     IModularCompliance internal _tokenCompliance;
     
     /// @dev List of registered STO contracts that have minting permissions

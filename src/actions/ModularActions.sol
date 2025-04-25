@@ -25,7 +25,7 @@ contract ModularActions is OwnableUpgradeable, MAStorage {
      * @dev Initializes the contract
      */
     function init() external initializer {
-        __Ownable_init();
+        __Ownable_init(msg.sender);
     }
 
     /**

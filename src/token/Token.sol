@@ -5,6 +5,8 @@ pragma solidity ^0.8.17;
 import "./IToken.sol";
 import "./TokenStorage.sol";
 import "../roles/AgentRoleUpgradeable.sol";
+import "../../lib/st-identity-registry/src/interfaces/IAttributeRegistry.sol";
+import "../../lib/st-identity-registry/src/libraries/Attributes.sol";
 
 contract Token is IToken, AgentRoleUpgradeable, TokenStorage {
 
@@ -25,18 +27,18 @@ contract Token is IToken, AgentRoleUpgradeable, TokenStorage {
     /**
      *  @dev the constructor initiates the token contract
      *  msg.sender is set automatically as the owner of the smart contract
-     *  @param _identityRegistry the address of the Identity registry linked to the token
+     *  @param _attributeRegistry the address of the Attribute registry linked to the token
      *  @param _compliance the address of the compliance contract linked to the token
      *  @param _name the name of the token
      *  @param _symbol the symbol of the token
      *  @param _decimals the decimals of the token
      *  @param _onchainID the address of the onchainID of the token
      *  emits an `UpdatedTokenInformation` event
-     *  emits an `IdentityRegistryAdded` event
+     *  emits an `AttributeRegistryAdded` event
      *  emits a `ComplianceAdded` event
      */
     function init(
-        address _identityRegistry,
+        address _attributeRegistry,
         address _compliance,
         string memory _name,
         string memory _symbol,
@@ -50,7 +52,7 @@ contract Token is IToken, AgentRoleUpgradeable, TokenStorage {
         // legacy contracts.
         require(owner() == address(0), "already initialized");
         require(
-            _identityRegistry != address(0)
+            _attributeRegistry != address(0)
             && _compliance != address(0)
         , "invalid argument - zero address");
         require(
@@ -58,13 +60,13 @@ contract Token is IToken, AgentRoleUpgradeable, TokenStorage {
             && keccak256(abi.encode(_symbol)) != keccak256(abi.encode(""))
         , "invalid argument - empty string");
         require(0 <= _decimals && _decimals <= 18, "decimals between 0 and 18");
-        __Ownable_init();
+        __Ownable_init(msg.sender);
         _tokenName = _name;
         _tokenSymbol = _symbol;
         _tokenDecimals = _decimals;
         _tokenOnchainID = _onchainID;
         _tokenPaused = true;
-        setIdentityRegistry(_identityRegistry);
+        setAttributeRegistry(_attributeRegistry);
         setCompliance(_compliance);
         emit UpdatedTokenInformation(_tokenName, _tokenSymbol, _tokenDecimals, _TOKEN_VERSION, _tokenOnchainID);
     }
@@ -148,8 +150,8 @@ contract Token is IToken, AgentRoleUpgradeable, TokenStorage {
     /**
      *  @notice ERC-20 overridden function that include logic to check for trade validity.
      *  Require that the from and to addresses are not frozen.
-     *  Require that the value should not exceed available balance .
-     *  Require that the to address is a verified address
+     *  Require that the value should not exceed available balance.
+     *  Require that the to address is an accredited investor
      *  @param _from The address of the sender
      *  @param _to The address of the receiver
      *  @param _amount The number of tokens to transfer
@@ -162,7 +164,7 @@ contract Token is IToken, AgentRoleUpgradeable, TokenStorage {
     ) external override whenNotPaused returns (bool) {
         require(!_frozen[_to] && !_frozen[_from], "wallet is frozen");
         require(_amount <= balanceOf(_from) - (_frozenTokens[_from]), "Insufficient Balance");
-        if (_tokenIdentityRegistry.isVerified(_to) && _tokenCompliance.canTransfer(_from, _to, _amount)) {
+        if (_tokenAttributeRegistry.hasAttribute(_to, Attributes.ACCREDITED_INVESTOR) && _tokenCompliance.canTransfer(_from, _to, _amount)) {
             _approve(_from, msg.sender, _allowances[_from][msg.sender] - (_amount));
             _transfer(_from, _to, _amount);
             _tokenCompliance.transferred(_from, _to, _amount);
@@ -252,25 +254,29 @@ contract Token is IToken, AgentRoleUpgradeable, TokenStorage {
         address _investorOnchainID
     ) external override onlyAgent returns (bool) {
         require(balanceOf(_lostWallet) != 0, "no tokens to recover");
-        IIdentity _onchainID = IIdentity(_investorOnchainID);
-        bytes32 _key = keccak256(abi.encode(_newWallet));
-        if (_onchainID.keyHasPurpose(_key, 1)) {
-            uint256 investorTokens = balanceOf(_lostWallet);
-            uint256 frozenTokens = _frozenTokens[_lostWallet];
-            _tokenIdentityRegistry.registerIdentity(_newWallet, _onchainID, _tokenIdentityRegistry.investorCountry
-                (_lostWallet));
-            forcedTransfer(_lostWallet, _newWallet, investorTokens);
-            if (frozenTokens > 0) {
-                freezePartialTokens(_newWallet, frozenTokens);
-            }
-            if (_frozen[_lostWallet] == true) {
-                setAddressFrozen(_newWallet, true);
-            }
-            _tokenIdentityRegistry.deleteIdentity(_lostWallet);
-            emit RecoverySuccess(_lostWallet, _newWallet, _investorOnchainID);
-            return true;
+        
+        // Ensure the new wallet is an accredited investor
+        require(_tokenAttributeRegistry.hasAttribute(_newWallet, Attributes.ACCREDITED_INVESTOR), 
+            "New wallet is not an accredited investor");
+            
+        uint256 investorTokens = balanceOf(_lostWallet);
+        uint256 frozenTokens = _frozenTokens[_lostWallet];
+        
+        // Transfer tokens from lost wallet to new wallet
+        forcedTransfer(_lostWallet, _newWallet, investorTokens);
+        
+        // Restore frozen tokens status if any
+        if (frozenTokens > 0) {
+            freezePartialTokens(_newWallet, frozenTokens);
         }
-        revert("Recovery not possible");
+        
+        // Restore frozen status if applicable
+        if (_frozen[_lostWallet] == true) {
+            setAddressFrozen(_newWallet, true);
+        }
+        
+        emit RecoverySuccess(_lostWallet, _newWallet, _investorOnchainID);
+        return true;
     }
 
     /**
@@ -288,10 +294,10 @@ contract Token is IToken, AgentRoleUpgradeable, TokenStorage {
     }
 
     /**
-     *  @dev See {IToken-identityRegistry}.
+     *  @dev See {IToken-attributeRegistry}.
      */
-    function identityRegistry() external view override returns (IIdentityRegistry) {
-        return _tokenIdentityRegistry;
+    function attributeRegistry() external view override returns (IAttributeRegistry) {
+        return _tokenAttributeRegistry;
     }
 
     /**
@@ -419,8 +425,8 @@ contract Token is IToken, AgentRoleUpgradeable, TokenStorage {
     /**
      *  @notice ERC-20 overridden function that include logic to check for trade validity.
      *  Require that the msg.sender and to addresses are not frozen.
-     *  Require that the value should not exceed available balance .
-     *  Require that the to address is a verified address
+     *  Require that the value should not exceed available balance.
+     *  Require that the to address is an accredited investor
      *  @param _to The address of the receiver
      *  @param _amount The number of tokens to transfer
      *  @return `true` if successful and revert if unsuccessful
@@ -428,7 +434,7 @@ contract Token is IToken, AgentRoleUpgradeable, TokenStorage {
     function transfer(address _to, uint256 _amount) public override whenNotPaused returns (bool) {
         require(!_frozen[_to] && !_frozen[msg.sender], "wallet is frozen");
         require(_amount <= balanceOf(msg.sender) - (_frozenTokens[msg.sender]), "Insufficient Balance");
-        if (_tokenIdentityRegistry.isVerified(_to) && _tokenCompliance.canTransfer(msg.sender, _to, _amount)) {
+        if (_tokenAttributeRegistry.hasAttribute(_to, Attributes.ACCREDITED_INVESTOR) && _tokenCompliance.canTransfer(msg.sender, _to, _amount)) {
             _transfer(msg.sender, _to, _amount);
             _tokenCompliance.transferred(msg.sender, _to, _amount);
             return true;
@@ -451,7 +457,7 @@ contract Token is IToken, AgentRoleUpgradeable, TokenStorage {
             _frozenTokens[_from] = _frozenTokens[_from] - (tokensToUnfreeze);
             emit TokensUnfrozen(_from, tokensToUnfreeze);
         }
-        if (_tokenIdentityRegistry.isVerified(_to)) {
+        if (_tokenAttributeRegistry.hasAttribute(_to, Attributes.ACCREDITED_INVESTOR)) {
             _transfer(_from, _to, _amount);
             _tokenCompliance.transferred(_from, _to, _amount);
             return true;
@@ -463,7 +469,7 @@ contract Token is IToken, AgentRoleUpgradeable, TokenStorage {
      *  @dev See {IToken-mint}.
      */
     function mint(address _to, uint256 _amount) public override onlyAgent {
-        require(_tokenIdentityRegistry.isVerified(_to), "Identity is not verified.");
+        require(_tokenAttributeRegistry.hasAttribute(_to, Attributes.ACCREDITED_INVESTOR), "Recipient is not an accredited investor.");
         require(_tokenCompliance.canTransfer(address(0), _to, _amount), "Compliance not followed");
         _mint(_to, _amount);
         _tokenCompliance.created(_to, _amount);
@@ -515,11 +521,11 @@ contract Token is IToken, AgentRoleUpgradeable, TokenStorage {
     }
 
     /**
-     *  @dev See {IToken-setIdentityRegistry}.
+     *  @dev See {IToken-setAttributeRegistry}.
      */
-    function setIdentityRegistry(address _identityRegistry) public override onlyOwner {
-        _tokenIdentityRegistry = IIdentityRegistry(_identityRegistry);
-        emit IdentityRegistryAdded(_identityRegistry);
+    function setAttributeRegistry(address _attributeRegistry) public override onlyOwner {
+        _tokenAttributeRegistry = IAttributeRegistry(_attributeRegistry);
+        emit AttributeRegistryAdded(_attributeRegistry);
     }
 
     /**

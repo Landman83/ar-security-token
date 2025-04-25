@@ -82,7 +82,7 @@ contract ModularCompliance is IModularCompliance, OwnableUpgradeable, MCStorage 
     }
 
     function init() external initializer {
-        __Ownable_init();
+        __Ownable_init(msg.sender);
     }
 
     /**

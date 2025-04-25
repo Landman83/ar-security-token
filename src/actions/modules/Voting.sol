@@ -102,7 +102,7 @@ contract WeightedVoteCheckpoint is VotingStorage, Ownable, AgentRole, AbstractMo
      * @notice Constructor for the voting contract
      * @param _securityToken Address of the security token
      */
-    constructor(address _securityToken) {
+    constructor(address _securityToken) Ownable(msg.sender) {
         require(_securityToken != address(0), "Invalid security token address");
         securityToken = IToken(_securityToken);
         _paused = false;

@@ -101,7 +101,7 @@ contract TREXImplementationAuthority is ITREXImplementationAuthority, Ownable {
      *  emits `ImplementationAuthoritySet` event
      *  emits a `IAFactorySet` event
      */
-    constructor (bool referenceStatus, address trexFactory, address iaFactory) {
+    constructor (bool referenceStatus, address trexFactory, address iaFactory) Ownable(msg.sender) {
         _reference = referenceStatus;
         _trexFactory = trexFactory;
         _iaFactory = iaFactory;
@@ -163,11 +163,8 @@ contract TREXImplementationAuthority is ITREXImplementationAuthority, Ownable {
         if(_newImplementationAuthority == address(0) && !isReferenceContract()){
             revert("only reference contract can deploy new IAs");}
 
-        address _ir = address(IToken(_token).identityRegistry());
+        address _ar = address(IToken(_token).attributeRegistry());
         address _mc = address(IToken(_token).compliance());
-        address _irs = address(IIdentityRegistry(_ir).identityStorage());
-        address _ctr = address(IIdentityRegistry(_ir).topicsRegistry());
-        address _tir = address(IIdentityRegistry(_ir).issuersRegistry());
 
         // Get the ModularActions address associated with the token
         address _ma = address(0);
@@ -183,11 +180,8 @@ contract TREXImplementationAuthority is ITREXImplementationAuthority, Ownable {
         // calling this function requires ownership of ALL contracts of the T-REX suite
         if(
             Ownable(_token).owner() != msg.sender
-            || Ownable(_ir).owner() != msg.sender
+            || Ownable(_ar).owner() != msg.sender
             || Ownable(_mc).owner() != msg.sender
-            || Ownable(_irs).owner() != msg.sender
-            || Ownable(_ctr).owner() != msg.sender
-            || Ownable(_tir).owner() != msg.sender
             || (_ma != address(0) && maOwner != address(0) && maOwner != msg.sender)) {
             revert("caller NOT owner of all contracts impacted");
         }
@@ -214,14 +208,9 @@ contract TREXImplementationAuthority is ITREXImplementationAuthority, Ownable {
         }
 
         IProxy(_token).setImplementationAuthority(_newImplementationAuthority);
-        IProxy(_ir).setImplementationAuthority(_newImplementationAuthority);
+        // Attempt to set implementation authority for attribute registry if it's a proxy
+        try IProxy(_ar).setImplementationAuthority(_newImplementationAuthority) {} catch {}
         IProxy(_mc).setImplementationAuthority(_newImplementationAuthority);
-        IProxy(_ctr).setImplementationAuthority(_newImplementationAuthority);
-        IProxy(_tir).setImplementationAuthority(_newImplementationAuthority);
-        // IRS can be shared by multiple tokens, and therefore could have been updated already
-        if (IProxy(_irs).getImplementationAuthority() == address(this)) {
-            IProxy(_irs).setImplementationAuthority(_newImplementationAuthority);
-        }
         // Set implementation authority for ModularActions if it exists
         if (_ma != address(0)) {
             try IProxy(_ma).setImplementationAuthority(_newImplementationAuthority) {} catch {}

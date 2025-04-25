@@ -68,7 +68,7 @@ contract TokenProxy is AbstractProxy {
 
     constructor(
         address implementationAuthority,
-        address _identityRegistry,
+        address _attributeRegistry,
         address _compliance,
         string memory _name,
         string memory _symbol,
@@ -78,7 +78,7 @@ contract TokenProxy is AbstractProxy {
     ) {
         require(
             implementationAuthority != address(0)
-            && _identityRegistry != address(0)
+            && _attributeRegistry != address(0)
             && _compliance != address(0)
         , "invalid argument - zero address");
         require(
@@ -95,7 +95,7 @@ contract TokenProxy is AbstractProxy {
         (bool success, ) = logic.delegatecall(
                 abi.encodeWithSignature(
                     "init(address,address,string,string,uint8,address)",
-                    _identityRegistry,
+                    _attributeRegistry,
                     _compliance,
                     _name,
                     _symbol,

@@ -115,7 +115,7 @@ contract DividendCheckpoint is DividendStorage, Ownable, AgentRole, AbstractModu
      * @notice Constructor for the dividend contract
      * @param _securityToken Address of the security token
      */
-    constructor(address _securityToken) {
+    constructor(address _securityToken) Ownable(msg.sender) {
         require(_securityToken != address(0), "Invalid security token address");
         securityToken = IToken(_securityToken);
         _paused = false;
@@ -504,20 +504,41 @@ contract DividendCheckpoint is DividendStorage, Ownable, AgentRole, AbstractModu
         uint256 _index,
         uint256 _dividendIndex
     ) private view {
-        _data.claimed[_index] = _dividend.claimed[_investor];
-        _data.excluded[_index] = _dividend.dividendExcluded[_investor];
-        _data.balance[_index] = _dividend.balances[_investor];
+        bool claimed = _dividend.claimed[_investor];
+        bool excluded = _dividend.dividendExcluded[_investor];
+        uint256 balance = _dividend.balances[_investor];
         
-        if (!_data.excluded[_index]) {
-            if (_data.claimed[_index]) {
-                _data.withheld[_index] = _dividend.withheld[_investor];
-                _data.amount[_index] = (_data.balance[_index] * _dividend.amount / _dividend.totalSupply) - _data.withheld[_index];
-            } else {
-                (uint256 claim, uint256 withheld) = calculateDividend(_dividendIndex, _investor);
+        _data.claimed[_index] = claimed;
+        _data.excluded[_index] = excluded;
+        _data.balance[_index] = balance;
+        
+        if (!excluded) {
+            if (claimed) {
+                uint256 withheld = _dividend.withheld[_investor];
                 _data.withheld[_index] = withheld;
-                _data.amount[_index] = claim - withheld;
+                _data.amount[_index] = (balance * _dividend.amount / _dividend.totalSupply) - withheld;
+            } else {
+                _calculateAndStoreAmounts(_data, _index, _dividendIndex, _investor);
             }
         }
+    }
+    
+    /**
+     * @notice Helper to calculate dividend amounts and reduce stack usage
+     * @param _data Data structure to populate
+     * @param _index Array index to populate
+     * @param _dividendIndex Dividend index
+     * @param _investor Investor address
+     */
+    function _calculateAndStoreAmounts(
+        InvestorData memory _data,
+        uint256 _index,
+        uint256 _dividendIndex,
+        address _investor
+    ) private view {
+        (uint256 claim, uint256 withheld) = calculateDividend(_dividendIndex, _investor);
+        _data.withheld[_index] = withheld;
+        _data.amount[_index] = claim - withheld;
     }
 
     /**
