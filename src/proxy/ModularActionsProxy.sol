@@ -3,7 +3,7 @@
 pragma solidity ^0.8.17;
 
 import "./AbstractProxy.sol";
-import "./authority/ITREXImplementationAuthority.sol";
+import "../interfaces/ITREXImplementationAuthority.sol";
 
 /**
  * @title ModularActionsProxy

@@ -3,11 +3,11 @@
 pragma solidity ^0.8.17;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./ITREXImplementationAuthority.sol";
-import "../../token/IToken.sol";
-import "../interface/IProxy.sol";
-import "../../factory/ITREXFactory.sol";
-import "./IIAFactory.sol";
+import "../../interfaces/ITREXImplementationAuthority.sol";
+import "../../interfaces/IToken.sol";
+import "../../interfaces/IProxy.sol";
+import "../../interfaces/ITREXFactory.sol";
+import "../../interfaces/IIAFactory.sol";
 
 contract TREXImplementationAuthority is ITREXImplementationAuthority, Ownable {
 

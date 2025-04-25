@@ -3,6 +3,7 @@
 pragma solidity ^0.8.17;
 
 import "./AbstractProxy.sol";
+import "../interfaces/IToken.sol";
 
 contract TokenProxy is AbstractProxy {
 

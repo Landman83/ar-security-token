@@ -3,10 +3,10 @@
 pragma solidity ^0.8.17;
 
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "../../token/IToken.sol";
-import "./IModularCompliance.sol";
-import "./MCStorage.sol";
-import "./modules/IModule.sol";
+import "../interfaces/IToken.sol";
+import "../interfaces/IModularCompliance.sol";
+import "../storage/MCStorage.sol";
+import "../interfaces/IComplianceModule.sol";
 
 
 contract ModularCompliance is IModularCompliance, OwnableUpgradeable, MCStorage {
@@ -54,7 +54,7 @@ contract ModularCompliance is IModularCompliance, OwnableUpgradeable, MCStorage 
         require(_module != address(0), "invalid argument - zero address");
         require(!_moduleBound[_module], "module already bound");
         require(_modules.length <= 24, "cannot add more than 25 modules");
-        IModule module = IModule(_module);
+        IComplianceModule module = IComplianceModule(_module);
         if (!module.isPlugAndPlay()) {
             require(module.canComplianceBind(address(this)), "compliance is not suitable for binding to the module");
         }
@@ -74,7 +74,7 @@ contract ModularCompliance is IModularCompliance, OwnableUpgradeable, MCStorage 
         uint256 length = _modules.length;
         for (uint256 i = 0; i < length; i++) {
             if (_modules[i] == _module) {
-                IModule(_module).unbindCompliance(address(this));
+                IComplianceModule(_module).unbindCompliance(address(this));
                 _modules[i] = _modules[length - 1];
                 _modules.pop();
                 _moduleBound[_module] = false;
@@ -95,7 +95,7 @@ contract ModularCompliance is IModularCompliance, OwnableUpgradeable, MCStorage 
         require(_value > 0, "invalid argument - no value transfer");
         uint256 length = _modules.length;
         for (uint256 i = 0; i < length; i++) {
-            IModule(_modules[i]).moduleTransferAction(_from, _to, _value);
+            IComplianceModule(_modules[i]).moduleTransferAction(_from, _to, _value);
         }
     }
 
@@ -107,7 +107,7 @@ contract ModularCompliance is IModularCompliance, OwnableUpgradeable, MCStorage 
         require(_value > 0, "invalid argument - no value mint");
         uint256 length = _modules.length;
         for (uint256 i = 0; i < length; i++) {
-            IModule(_modules[i]).moduleMintAction(_to, _value);
+            IComplianceModule(_modules[i]).moduleMintAction(_to, _value);
         }
     }
 
@@ -119,7 +119,7 @@ contract ModularCompliance is IModularCompliance, OwnableUpgradeable, MCStorage 
         require(_value > 0, "invalid argument - no value burn");
         uint256 length = _modules.length;
         for (uint256 i = 0; i < length; i++) {
-            IModule(_modules[i]).moduleBurnAction(_from, _value);
+            IComplianceModule(_modules[i]).moduleBurnAction(_from, _value);
         }
     }
 
@@ -185,7 +185,7 @@ contract ModularCompliance is IModularCompliance, OwnableUpgradeable, MCStorage 
     function canTransfer(address _from, address _to, uint256 _value) external view override returns (bool) {
         uint256 length = _modules.length;
         for (uint256 i = 0; i < length; i++) {
-            if (!IModule(_modules[i]).moduleCheck(_from, _to, _value, address(this))) {
+            if (!IComplianceModule(_modules[i]).moduleCheck(_from, _to, _value, address(this))) {
                 return false;
             }
         }

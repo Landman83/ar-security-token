@@ -2,13 +2,13 @@
 
 pragma solidity ^0.8.17;
 
-import "./IModule.sol";
+import "../../interfaces/IActionModule.sol";
 
 /**
  * @title Abstract Action Module
  * @dev Base implementation for all action modules
  */
-abstract contract AbstractModule is IModule {
+abstract contract AbstractModule is IActionModule {
     /// Mapping of actions contracts to binding status
     mapping(address => bool) internal _actionsBound;
 

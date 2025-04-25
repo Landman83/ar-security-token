@@ -2,9 +2,9 @@
 
 pragma solidity ^0.8.17;
 
-import "./IModule.sol";
+import "../../interfaces/IComplianceModule.sol";
 
-abstract contract AbstractModule is IModule {
+abstract contract AbstractModule is IComplianceModule {
 
     /// compliance contract binding status
     mapping(address => bool) private _complianceBound;

@@ -3,9 +3,9 @@
 pragma solidity ^0.8.17;
 
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "../token/IToken.sol";
-import "./MAStorage.sol";
-import "./modules/IModule.sol";
+import "../interfaces/IToken.sol";
+import "../storage/MAStorage.sol";
+import "../interfaces/IActionModule.sol";
 
 /**
  * @title ModularActions
@@ -61,7 +61,7 @@ contract ModularActions is OwnableUpgradeable, MAStorage {
         require(!_moduleBound[_module], "Module already bound");
         require(_modules.length <= 24, "Cannot add more than 25 modules");
         
-        IModule module = IModule(_module);
+        IActionModule module = IActionModule(_module);
         if (!module.isPlugAndPlay()) {
             require(module.canActionsBind(address(this)), "Actions contract is not suitable for binding to the module");
         }
@@ -83,7 +83,7 @@ contract ModularActions is OwnableUpgradeable, MAStorage {
         uint256 length = _modules.length;
         for (uint256 i = 0; i < length; i++) {
             if (_modules[i] == _module) {
-                IModule(_module).unbindActions(address(this));
+                IActionModule(_module).unbindActions(address(this));
                 _modules[i] = _modules[length - 1];
                 _modules.pop();
                 _moduleBound[_module] = false;

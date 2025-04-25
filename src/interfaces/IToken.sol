@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.17;
 
-import "../compliance/modular/IModularCompliance.sol";
+import "./IModularCompliance.sol";
 import "../../lib/st-identity-registry/src/interfaces/IAttributeRegistry.sol";
 
 interface IToken {

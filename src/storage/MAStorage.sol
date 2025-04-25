@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.17;
 
-import "./IModularStorage.sol";
+import "../interfaces/IModularStorage.sol";
 
 /**
  * @title Modular Actions Storage

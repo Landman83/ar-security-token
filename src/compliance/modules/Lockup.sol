@@ -3,8 +3,8 @@ pragma solidity ^0.8.17;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "./AbstractModuleUpgradeable.sol"; // ERC-3643 base module
-import "../../../token/IToken.sol"; // T-REX Token interface
-import "../IModularCompliance.sol"; // Modular Compliance interface
+import "../../interfaces/IToken.sol"; // T-REX Token interface
+import "../../interfaces/IModularCompliance.sol"; // Modular Compliance interface
 
 contract Lockup is AbstractModuleUpgradeable {
     // Default lockup period (6 minutes = 360 seconds)

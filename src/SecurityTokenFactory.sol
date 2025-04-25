@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.17;
 
-import "../roles/AgentRole.sol";
-import "../token/IToken.sol";
-import "../compliance/modular/IModularCompliance.sol";
-import "../compliance/modular/modules/IModule.sol";
-import "../proxy/authority/ITREXImplementationAuthority.sol";
-import "../proxy/TokenProxy.sol";
-import "../proxy/ModularComplianceProxy.sol";
-import "./ITREXFactory.sol";
-import "../../lib/st-identity-registry/src/interfaces/IAttributeRegistry.sol";
+import "./roles/AgentRole.sol";
+import "./interfaces/IToken.sol";
+import "./interfaces/IModularCompliance.sol";
+import "./interfaces/IComplianceModule.sol";
+import "./interfaces/ITREXImplementationAuthority.sol";
+import "./proxy/TokenProxy.sol";
+import "./proxy/ModularComplianceProxy.sol";
+import "./interfaces/ITREXFactory.sol";
+import "st-identity-registry/src/interfaces/IAttributeRegistry.sol";
 
 /**
  * @title AccreditedInvestorTokenFactory
  * @dev An updated factory for deploying tokens that use the attribute registry for compliance
  */
-contract AccreditedInvestorTokenFactory is Ownable {
+contract SecurityTokenFactory is Ownable {
     /// the address of the implementation authority contract used in the tokens deployed by the factory
     address private _implementationAuthority;
 

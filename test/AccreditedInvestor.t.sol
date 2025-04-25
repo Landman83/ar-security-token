@@ -5,16 +5,16 @@ import "forge-std/Test.sol";
 import "forge-std/console.sol";
 import "forge-std/Vm.sol";
 
-import "../src/token/Token.sol";
-import "../src/token/IToken.sol";
-import "../src/compliance/modular/ModularCompliance.sol";
-import "../src/compliance/modular/modules/AccreditedInvestor.sol";
+import "../src/SecurityToken.sol";
+import "../src/interfaces/IToken.sol";
+import "../src/compliance/ModularCompliance.sol";
+import "../src/compliance/modules/AccreditedInvestor.sol";
 import "../lib/st-identity-registry/src/AttributeRegistry.sol";
 import "../lib/st-identity-registry/src/libraries/Attributes.sol";
 
 contract AccreditedInvestorTest is Test {
     // Core contracts
-    Token public token;
+    SecurityToken public token;
     ModularCompliance public compliance;
     AccreditedInvestor public accreditedModule;
     AttributeRegistry public attributeRegistry;
@@ -45,7 +45,7 @@ contract AccreditedInvestorTest is Test {
         accreditedModule.setAttributeRegistry(address(attributeRegistry));
         
         // Deploy Token
-        token = new Token();
+        token = new SecurityToken();
         token.init(
             address(attributeRegistry),
             address(compliance),

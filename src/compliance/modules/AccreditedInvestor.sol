@@ -3,10 +3,10 @@ pragma solidity ^0.8.17;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "./AbstractModuleUpgradeable.sol"; // ERC-3643 base module
-import "../../../token/IToken.sol"; // T-REX Token interface
-import "../IModularCompliance.sol"; // Modular Compliance interface
-import "../../../../lib/st-identity-registry/src/interfaces/IAttributeRegistry.sol"; // Attribute Registry interface
-import "../../../../lib/st-identity-registry/src/libraries/Attributes.sol"; // Standard attribute types
+import "../../interfaces/IToken.sol"; // T-REX Token interface
+import "../../interfaces/IModularCompliance.sol"; // Modular Compliance interface
+import "st-identity-registry/src/interfaces/IAttributeRegistry.sol"; // Attribute Registry interface
+import "st-identity-registry/src/libraries/Attributes.sol"; // Standard attribute types
 
 /**
  * @title AccreditedInvestor Compliance Module

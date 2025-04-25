@@ -2,13 +2,13 @@
 
 pragma solidity ^0.8.17;
 
-import "./IToken.sol";
-import "./TokenStorage.sol";
-import "../roles/AgentRoleUpgradeable.sol";
-import "../../lib/st-identity-registry/src/interfaces/IAttributeRegistry.sol";
-import "../../lib/st-identity-registry/src/libraries/Attributes.sol";
+import "./interfaces/IToken.sol";
+import "./storage/TokenStorage.sol";
+import "./roles/AgentRoleUpgradeable.sol";
+import "st-identity-registry/src/interfaces/IAttributeRegistry.sol";
+import "st-identity-registry/src/libraries/Attributes.sol";
 
-contract Token is IToken, AgentRoleUpgradeable, TokenStorage {
+contract SecurityToken is IToken, AgentRoleUpgradeable, TokenStorage {
 
     /// modifiers
 

@@ -2,8 +2,8 @@
 
 pragma solidity ^0.8.17;
 
-import "./interface/IProxy.sol";
-import "./authority/ITREXImplementationAuthority.sol";
+import "../interfaces/IProxy.sol";
+import "../interfaces/ITREXImplementationAuthority.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 abstract contract AbstractProxy is IProxy, Initializable {

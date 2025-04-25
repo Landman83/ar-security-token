@@ -6,7 +6,7 @@ pragma solidity ^0.8.17;
  * @title Action Module Interface
  * @dev Interface for all modules that can be added to ModularActions
  */
-interface IModule {
+interface IActionModule {
     /**
      * @dev Emitted when the actions contract is bound to the module
      * @param actions The address of the actions contract being bound
