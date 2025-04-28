@@ -14,6 +14,15 @@ import "../../src/proxy/ComplianceModuleProxy.sol";
  */
 contract DeployModulesScript is Script {
     function run(address attributeRegistry) public returns (address aicm, address lockupCM, address insiderRegistry) {
+        // Get deployer address from environment
+        address deployer;
+        try vm.envAddress("DEPLOYER_ADDRESS") returns (address deployerAddr) {
+            deployer = deployerAddr;
+            console.log("Using deployer address from environment in module deployment:", deployer);
+        } catch {
+            deployer = msg.sender; // Fallback to msg.sender if no environment variable
+            console.log("No DEPLOYER_ADDRESS set, using msg.sender as deployer in module deployment:", deployer);
+        }
         // Deploy AccreditedInvestor Module
         console.log("Deploying AccreditedInvestor implementation...");
         AccreditedInvestor aiImplementation = new AccreditedInvestor();
@@ -60,19 +69,19 @@ contract DeployModulesScript is Script {
         AccreditedInvestor(aicm).setInsidersExemptFromAccreditation(true);
         console.log("AccreditedInvestor module configured");
         
-        // Add the actual caller as an insider since initialize() added the contract as an insider
-        console.log("Adding deployer to InsiderRegistry as AGENT...");
-        InsiderRegistry(insiderRegistry).addInsider(msg.sender, uint8(IInsiderRegistry.InsiderType.AGENT));
+        // Add the actual deployer address as an insider
+        console.log("Adding deployer as AGENT insider:", deployer);
+        InsiderRegistry(insiderRegistry).addInsider(deployer, uint8(IInsiderRegistry.InsiderType.AGENT));
         
         // Also add them as agent in the registry
-        console.log("Adding deployer as agent...");
-        InsiderRegistry(insiderRegistry).addAgent(msg.sender);
+        console.log("Adding deployer as agent:", deployer);
+        InsiderRegistry(insiderRegistry).addAgent(deployer);
         
-        // Transfer ownership to the caller
-        AccreditedInvestor(aicm).transferOwnership(msg.sender);
-        Lockup(lockupCM).transferOwnership(msg.sender);
-        InsiderRegistry(insiderRegistry).transferOwnership(msg.sender);
-        console.log("Module ownership transferred to caller:", msg.sender);
+        // Transfer ownership to the actual deployer
+        AccreditedInvestor(aicm).transferOwnership(deployer);
+        Lockup(lockupCM).transferOwnership(deployer);
+        InsiderRegistry(insiderRegistry).transferOwnership(deployer);
+        console.log("Module ownership transferred to deployer:", deployer);
 
         return (aicm, lockupCM, insiderRegistry);
     }

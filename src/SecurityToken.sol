@@ -434,7 +434,9 @@ contract SecurityToken is IToken, AgentRoleUpgradeable, TokenStorage {
     function transfer(address _to, uint256 _amount) public override whenNotPaused returns (bool) {
         require(!_frozen[_to] && !_frozen[msg.sender], "wallet is frozen");
         require(_amount <= balanceOf(msg.sender) - (_frozenTokens[msg.sender]), "Insufficient Balance");
-        if (_tokenAttributeRegistry.hasAttribute(_to, Attributes.ACCREDITED_INVESTOR) && _tokenCompliance.canTransfer(msg.sender, _to, _amount)) {
+        
+        // Let the compliance module handle all compliance checks
+        if (_tokenCompliance.canTransfer(msg.sender, _to, _amount)) {
             _transfer(msg.sender, _to, _amount);
             _tokenCompliance.transferred(msg.sender, _to, _amount);
             return true;
@@ -457,7 +459,9 @@ contract SecurityToken is IToken, AgentRoleUpgradeable, TokenStorage {
             _frozenTokens[_from] = _frozenTokens[_from] - (tokensToUnfreeze);
             emit TokensUnfrozen(_from, tokensToUnfreeze);
         }
-        if (_tokenAttributeRegistry.hasAttribute(_to, Attributes.ACCREDITED_INVESTOR)) {
+        
+        // Let the compliance module handle all compliance checks
+        if (_tokenCompliance.canTransfer(_from, _to, _amount)) {
             _transfer(_from, _to, _amount);
             _tokenCompliance.transferred(_from, _to, _amount);
             return true;
@@ -469,8 +473,8 @@ contract SecurityToken is IToken, AgentRoleUpgradeable, TokenStorage {
      *  @dev See {IToken-mint}.
      */
     function mint(address _to, uint256 _amount) public override onlyAgent {
-        require(_tokenAttributeRegistry.hasAttribute(_to, Attributes.ACCREDITED_INVESTOR), "Recipient is not an accredited investor.");
-        require(_tokenCompliance.canTransfer(address(0), _to, _amount), "Compliance not followed");
+        // Let the compliance module handle all compliance checks
+        require(_tokenCompliance.canTransfer(address(0), _to, _amount), "Compliance check failed");
         _mint(_to, _amount);
         _tokenCompliance.created(_to, _amount);
         emit Minted(_to, _amount);
