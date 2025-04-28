@@ -1,0 +1,104 @@
+# Implementation Plan for InsiderRegistry System
+
+## Overview
+This implementation plan outlines the development of an InsiderRegistry system for the security token platform. The system will track "insiders" (founders, executives, directors, employees, agents) who are exempt from certain trading restrictions, specifically allowing them to transfer or receive tokens regardless of their accreditation status.
+
+## Components
+
+### 1. IInsiderRegistry.sol (Interface)
+The interface will define all functions necessary for managing insiders:
+
+- **Core Functions**:
+  - `addInsider(address _wallet, uint8 _insiderType)` - Register an address as an insider with specific type
+  - `removeInsider(address _wallet)` - Remove insider status from an address
+  - `updateInsiderType(address _wallet, uint8 _newType)` - Change an insider's type
+  - `isInsider(address _wallet)` - Check if an address is registered as an insider
+  - `getInsiderType(address _wallet)` - Get the type of insider for an address
+  - `getInsiders()` - Return a list of all insider addresses
+  - `getInsdiersByType(uint8 _type)` - Return insiders of a specific type
+
+- **Event Declarations**:
+  - `InsiderAdded(address indexed wallet, uint8 insiderType)`
+  - `InsiderRemoved(address indexed wallet)`
+  - `InsiderTypeUpdated(address indexed wallet, uint8 newType)`
+
+- **Constants**:
+  - Define insider type enumerations (FOUNDER, EXECUTIVE, DIRECTOR, EMPLOYEE, AGENT)
+
+### 2. InsiderRegistry.sol (Implementation)
+
+- **Storage**:
+  - Mapping for insider status: `mapping(address => bool) private _insiders`
+  - Mapping for insider type: `mapping(address => uint8) private _insiderTypes`
+  - Array for tracking all insiders: `address[] private _insiderList`
+  - Mappings for type-based categorization: `mapping(uint8 => address[]) private _insidersByType`
+
+- **Access Control**:
+  - Integrate with AgentRole from existing codebase
+  - Use `onlyOwnerOrAgent` modifier for all administrative functions
+
+- **Implementation Details**:
+  - Constructor/initializer to set up the contract with the deployer as AGENT type insider
+  - Complete implementation of all interface functions
+  - Gas-optimized storage and retrieval methods
+  - Comprehensive event emissions for all state changes
+
+### 3. AccreditedInvestor.sol Modifications
+
+- **New Storage Variables**:
+  - `IInsiderRegistry public insiderRegistry` - Reference to the insider registry contract
+  - `bool public insidersExemptFromAccreditation` - Flag to enable/disable insider exemptions
+
+- **New Functions**:
+  - `setInsiderRegistry(address _registry)` - Set the insider registry address
+  - `setInsidersExemptFromAccreditation(bool _exempt)` - Toggle insider exemption status
+  - Enhance `isAccreditedInvestor()` to check for insider status
+
+- **Modified Logic**:
+  - Update `moduleCheck()` to exempt insiders when configured:
+    ```solidity
+    // Pseudo-code
+    if (insidersExemptFromAccreditation && 
+        address(insiderRegistry) != address(0) && 
+        insiderRegistry.isInsider(_to)) {
+        return true; // Exempt insiders from accreditation checks
+    }
+    ```
+
+## Integration Points
+
+### ModularCompliance Integration
+- The modified AccreditedInvestor module will still work through the ModularCompliance contract
+- No changes needed to ModularCompliance.sol as it already supports modular extension
+
+### Security Token Integration
+- Ensure TokenProxy can properly interact with the updated compliance system
+- No direct integration needed at the token level as compliance is externalized
+
+## Development Approach
+
+### 1. Contract Development
+- Develop IInsiderRegistry.sol interface first
+- Implement InsiderRegistry.sol with full test coverage
+- Modify AccreditedInvestor.sol to integrate with the registry
+
+### 2. Testing Strategy
+- Unit tests for all InsiderRegistry functions
+- Integration tests with AccreditedInvestor to verify exemption logic
+- Scenario tests for complex compliance interactions
+- Edge case testing (e.g., address reuse, module conflicts)
+
+### 3. Deployment Strategy
+- Deploy InsiderRegistry contract first
+- Update AccreditedInvestor implementation
+- Configure the contracts to work together
+- Initialize with appropriate admin/agent addresses
+- Add deployer as AGENT type insider
+
+## Security Considerations
+
+1. Careful role management to prevent unauthorized insider additions
+2. Complete validation checks on all inputs
+3. Protection against reentry attacks
+4. Secure upgrade patterns for contract modifications
+5. Use of established OpenZeppelin access control patterns
