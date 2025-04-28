@@ -4,6 +4,8 @@ pragma solidity ^0.8.17;
 import "forge-std/Script.sol";
 import "../../src/compliance/modules/AccreditedInvestor.sol";
 import "../../src/compliance/modules/Lockup.sol";
+import "../../src/compliance/modules/InsiderRegistry.sol";
+import "../../src/interfaces/IInsiderRegistry.sol";
 import "../../src/proxy/ComplianceModuleProxy.sol";
 
 /**
@@ -11,7 +13,7 @@ import "../../src/proxy/ComplianceModuleProxy.sol";
  * @dev Deploys compliance modules
  */
 contract DeployModulesScript is Script {
-    function run(address attributeRegistry) public returns (address aicm, address lockupCM) {
+    function run(address attributeRegistry) public returns (address aicm, address lockupCM, address insiderRegistry) {
         // Deploy AccreditedInvestor Module
         console.log("Deploying AccreditedInvestor implementation...");
         AccreditedInvestor aiImplementation = new AccreditedInvestor();
@@ -22,9 +24,15 @@ contract DeployModulesScript is Script {
         Lockup lockupImplementation = new Lockup();
         console.log("Lockup implementation deployed at:", address(lockupImplementation));
 
+        // Deploy InsiderRegistry
+        console.log("Deploying InsiderRegistry implementation...");
+        InsiderRegistry irImplementation = new InsiderRegistry();
+        console.log("InsiderRegistry implementation deployed at:", address(irImplementation));
+
         // Prepare initialization data
         bytes memory aiInitData = abi.encodeWithSelector(AccreditedInvestor.initialize.selector);
         bytes memory lockupInitData = abi.encodeWithSelector(Lockup.initialize.selector);
+        bytes memory irInitData = abi.encodeWithSelector(InsiderRegistry.initialize.selector);
 
         // Deploy AccreditedInvestor Module Proxy
         console.log("Deploying AccreditedInvestor module proxy...");
@@ -38,16 +46,34 @@ contract DeployModulesScript is Script {
         lockupCM = address(lockupProxy);
         console.log("Lockup module proxy deployed at:", lockupCM);
 
+        // Deploy InsiderRegistry Proxy
+        console.log("Deploying InsiderRegistry proxy...");
+        ComplianceModuleProxy irProxy = new ComplianceModuleProxy(address(irImplementation), irInitData);
+        insiderRegistry = address(irProxy);
+        console.log("InsiderRegistry proxy deployed at:", insiderRegistry);
+
         // Configure AccreditedInvestor Module
         console.log("Setting attribute registry in AccreditedInvestor module...");
         AccreditedInvestor(aicm).setAttributeRegistry(attributeRegistry);
+        console.log("Setting insider registry in AccreditedInvestor module...");
+        AccreditedInvestor(aicm).setInsiderRegistry(insiderRegistry);
+        AccreditedInvestor(aicm).setInsidersExemptFromAccreditation(true);
         console.log("AccreditedInvestor module configured");
+        
+        // Add the actual caller as an insider since initialize() added the contract as an insider
+        console.log("Adding deployer to InsiderRegistry as AGENT...");
+        InsiderRegistry(insiderRegistry).addInsider(msg.sender, uint8(IInsiderRegistry.InsiderType.AGENT));
+        
+        // Also add them as agent in the registry
+        console.log("Adding deployer as agent...");
+        InsiderRegistry(insiderRegistry).addAgent(msg.sender);
         
         // Transfer ownership to the caller
         AccreditedInvestor(aicm).transferOwnership(msg.sender);
         Lockup(lockupCM).transferOwnership(msg.sender);
+        InsiderRegistry(insiderRegistry).transferOwnership(msg.sender);
         console.log("Module ownership transferred to caller:", msg.sender);
 
-        return (aicm, lockupCM);
+        return (aicm, lockupCM, insiderRegistry);
     }
 }

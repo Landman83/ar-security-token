@@ -36,7 +36,7 @@ contract DeployAllScript is Script {
         // Step 3: Deploy compliance modules
         console.log("Step 3: Deploying compliance modules...");
         DeployModulesScript modulesScript = new DeployModulesScript();
-        (address aiModule, address lockupModule) = modulesScript.run(attributeRegistry);
+        (address aiModule, address lockupModule, address insiderRegistry) = modulesScript.run(attributeRegistry);
         
         // Step 4: Deploy security token factory
         console.log("Step 4: Deploying security token factory...");
@@ -113,6 +113,7 @@ contract DeployAllScript is Script {
         console.log("Implementation Authority:", implementationAuthority);
         console.log("AccreditedInvestor Module:", aiModule);
         console.log("Lockup Module:", lockupModule);
+        console.log("Insider Registry:", insiderRegistry);
         console.log("Security Token Factory:", factory);
         console.log("Attribute Registry:", attributeRegistry);
         console.log("Deployed Token:", token);

@@ -5,22 +5,32 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "./AbstractModuleUpgradeable.sol"; // ERC-3643 base module
 import "../../interfaces/IToken.sol"; // T-REX Token interface
 import "../../interfaces/IModularCompliance.sol"; // Modular Compliance interface
+import "../../interfaces/IInsiderRegistry.sol"; // Insider Registry interface
 import "st-identity-registry/src/interfaces/IAttributeRegistry.sol"; // Attribute Registry interface
 import "st-identity-registry/src/libraries/Attributes.sol"; // Standard attribute types
 
 /**
  * @title AccreditedInvestor Compliance Module
  * @dev Prohibits transfers and mints to wallets that do not have the ACCREDITED_INVESTOR attribute set to true.
+ * Allows exemptions for registered insiders when configured.
  */
 contract AccreditedInvestor is AbstractModuleUpgradeable {
     // Registry that tracks accredited investor statuses
     IAttributeRegistry public attributeRegistry;
+    
+    // Registry that tracks insider statuses
+    IInsiderRegistry public insiderRegistry;
+    
+    // Flag to determine if insiders are exempt from accreditation checks
+    bool public insidersExemptFromAccreditation;
     
     // Mapping to track initialized status for each compliance
     mapping(address => bool) private _initialized;
     
     // Events
     event AttributeRegistrySet(address indexed oldRegistry, address indexed newRegistry);
+    event InsiderRegistrySet(address indexed oldRegistry, address indexed newRegistry);
+    event InsiderExemptionSet(bool exemptionStatus);
     event ModuleInitialized(address indexed compliance);
     
     // Modifier to ensure token compliance initialization
@@ -53,13 +63,49 @@ contract AccreditedInvestor is AbstractModuleUpgradeable {
     }
     
     /**
-     * @dev Checks if an address is an accredited investor
+     * @dev Sets the insider registry contract address
+     * @param _insiderRegistry The address of the insider registry
+     */
+    function setInsiderRegistry(address _insiderRegistry) external onlyOwner {
+        require(_insiderRegistry != address(0), "Invalid registry address");
+        address oldRegistry = address(insiderRegistry);
+        insiderRegistry = IInsiderRegistry(_insiderRegistry);
+        emit InsiderRegistrySet(oldRegistry, _insiderRegistry);
+    }
+    
+    /**
+     * @dev Sets whether insiders are exempt from accreditation checks
+     * @param _exempt Whether insiders are exempt
+     */
+    function setInsidersExemptFromAccreditation(bool _exempt) external onlyOwner {
+        insidersExemptFromAccreditation = _exempt;
+        emit InsiderExemptionSet(_exempt);
+    }
+    
+    /**
+     * @dev Checks if an address is an accredited investor or exempt insider
      * @param _address The address to check
-     * @return bool True if the address is an accredited investor
+     * @return bool True if the address is an accredited investor or exempt insider
      */
     function isAccreditedInvestor(address _address) public view returns (bool) {
         require(address(attributeRegistry) != address(0), "Attribute registry not set");
-        return attributeRegistry.hasAttribute(_address, Attributes.ACCREDITED_INVESTOR);
+        
+        // Check if address is accredited
+        bool isAccredited = attributeRegistry.hasAttribute(_address, Attributes.ACCREDITED_INVESTOR);
+        
+        // If already accredited, return true
+        if (isAccredited) {
+            return true;
+        }
+        
+        // If insider exemption is enabled and address is an insider, allow it
+        if (insidersExemptFromAccreditation && 
+            address(insiderRegistry) != address(0) && 
+            insiderRegistry.isInsider(_address)) {
+            return true;
+        }
+        
+        return false;
     }
     
     /**
@@ -86,7 +132,7 @@ contract AccreditedInvestor is AbstractModuleUpgradeable {
             return true;
         }
         
-        // All recipients must be accredited investors
+        // All recipients must be accredited investors or exempt insiders
         return isAccreditedInvestor(_to);
     }
     
