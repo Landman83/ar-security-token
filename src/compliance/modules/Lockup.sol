@@ -89,7 +89,7 @@ contract Lockup is AbstractModuleUpgradeable {
         emit RemoveLockUpFromUser(_userAddress, _lockupName);
     }
 
-    // Check transfer compliance
+    // Check transfer compliance (view-only version)
     function moduleCheck(
         address _from,
         address /*_to*/,
@@ -101,6 +101,21 @@ contract Lockup is AbstractModuleUpgradeable {
             return true;
         }
         return _checkIfValidTransfer(_from, _value, _compliance);
+    }
+    
+    // New method for checking transfer compliance that can modify state if needed
+    function checkTransferCompliance(
+        address from,
+        address to,
+        uint256 amount,
+        address compliance
+    ) external override onlyComplianceCall returns (bool) {
+        // For Lockup module, we don't need to modify state during compliance checks
+        // so we can reuse the same logic as moduleCheck
+        if (from == address(0)) {
+            return true;
+        }
+        return _checkIfValidTransfer(from, amount, compliance);
     }
 
     // Internal logic to verify transfer

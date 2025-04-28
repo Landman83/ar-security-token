@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-/// @title ComplianceModuleProxy
-/// @notice UUPS Proxy for compliance modules with better context preservation
-contract ComplianceModuleProxy {
+/// @title UUPSTokenProxy
+/// @notice UUPS Proxy for security tokens with better context preservation
+contract UUPSTokenProxy {
     /// @dev Storage slot for implementation address (EIP-1967)
     bytes32 private constant IMPLEMENTATION_SLOT = 
         0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;

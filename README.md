@@ -6,7 +6,7 @@ This repository contains a Solidity implementation of a security token system us
 
 - **SecurityToken**: The main token contract implementing ERC-20 compatible security token
 - **ModularCompliance**: System to enforce transfer restrictions through compliance modules
-- **Implementation Authority**: Central registry that manages implementations
+- **VersionRegistry**: Central registry that manages contract implementations
 - **SecurityTokenFactory**: Factory to deploy new token instances via proxies
 
 ### Key Components
@@ -75,10 +75,10 @@ $ forge fmt
 The deployment scripts are organized into modular components to avoid contract size limitations:
 
 1. `Deploy_Implementations.s.sol`: Deploys token and compliance implementations
-2. `Deploy_Authority.s.sol`: Deploys implementation authority
-3. `Deploy_Modules.s.sol`: Deploys compliance modules
-4. `Deploy_Factory.s.sol`: Deploys security token factory
-5. `DeployToken.s.sol`: Deploys an individual token
+2. `Deploy_Modules.s.sol`: Deploys compliance modules
+3. `Deploy_Factory.s.sol`: Deploys security token factory using VersionRegistry
+4. `DeployToken.s.sol`: Deploys an individual token
+5. `DeployAll.s.sol`: Main script that orchestrates all deployments
 
 ### Deploy All Components
 

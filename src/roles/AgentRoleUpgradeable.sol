@@ -18,6 +18,15 @@ contract AgentRoleUpgradeable is OwnableUpgradeable {
         require(isAgent(msg.sender), "AgentRole: caller does not have the Agent role");
         _;
     }
+    
+    /**
+     * @dev Initializes the contract setting the owner as the initial agent
+     */
+    function __AgentRole_init() internal onlyInitializing {
+        // Owner is automatically an agent
+        _agents.add(msg.sender);
+        emit AgentAdded(msg.sender);
+    }
 
     function addAgent(address _agent) public onlyOwner {
         require(_agent != address(0), "invalid argument - zero address");

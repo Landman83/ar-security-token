@@ -2,22 +2,21 @@
 pragma solidity ^0.8.17;
 
 import "forge-std/Script.sol";
-import "./deployment/Deploy_Implementations.s.sol";
-import "./deployment/Deploy_Authority.s.sol";
-import "./deployment/Deploy_Modules.s.sol";
-import "./deployment/Deploy_Factory.s.sol";
-import "../src/proxy/authority/TREXImplementationAuthority.sol";
+import "../src/proxy/VersionRegistry.sol";
+import "../src/RefactoredSecurityTokenFactory.sol";
 import "../src/SecurityToken.sol";
-import "../src/SecurityTokenFactory.sol";
 import "../src/compliance/ModularCompliance.sol";
 import "../src/compliance/modules/AccreditedInvestor.sol";
 import "../src/interfaces/IInsiderRegistry.sol";
+import "../src/proxy/ComplianceModuleProxy.sol";
+import "../src/compliance/modules/InsiderRegistry.sol";
 
 /**
  * @title DeployAllScript
- * @dev Main deployment script that orchestrates the deployment of all components
+ * @dev Main deployment script that orchestrates the deployment of all components with the new proxy architecture
  */
 contract DeployAllScript is Script {
+    // Note: Deploy_Authority.s.sol was removed as we no longer have an authority to deploy
     function run() public {
         // Get deployer address from environment
         address deployer;
@@ -41,260 +40,136 @@ contract DeployAllScript is Script {
             console.log("Warning: ATTRIBUTE_REGISTRY_ADDRESS is not a valid address, using fallback:", attributeRegistry);
         }
         
-        // Step 1: Deploy implementations
-        console.log("Step 1: Deploying implementations...");
-        DeployImplementationsScript implementationsScript = new DeployImplementationsScript();
-        (address tokenImpl, address mcImpl) = implementationsScript.run();
+        // Step 1: Deploy the VersionRegistry
+        console.log("Step 1: Deploying VersionRegistry...");
+        VersionRegistry registry = new VersionRegistry();
         
-        // Step 2: Deploy implementation authority
-        console.log("Step 2: Deploying implementation authority...");
-        DeployAuthorityScript authorityScript = new DeployAuthorityScript();
-        address implementationAuthority = authorityScript.run(tokenImpl, mcImpl);
+        // Step 2: Deploy implementations
+        console.log("Step 2: Deploying implementations...");
+        SecurityToken tokenImpl = new SecurityToken();
+        ModularCompliance mcImpl = new ModularCompliance();
+        AccreditedInvestor aiImpl = new AccreditedInvestor();
         
-        // Step 3: Deploy compliance modules
-        console.log("Step 3: Deploying compliance modules...");
-        DeployModulesScript modulesScript = new DeployModulesScript();
-        (address aiModule, address lockupModule, address insiderRegistry) = modulesScript.run(attributeRegistry);
+        // Deploy InsiderRegistry implementation separately
+        console.log("Deploying InsiderRegistry implementation...");
+        InsiderRegistry insiderRegImpl = new InsiderRegistry();
         
-        // Step 4: Deploy security token factory
-        console.log("Step 4: Deploying security token factory...");
-        DeployFactoryScript factoryScript = new DeployFactoryScript();
-        address factory = factoryScript.run(implementationAuthority);
+        // Step 3: Register implementations in the registry
+        console.log("Step 3: Registering implementations in the version registry...");
+        registry.registerImplementation("security-token", "1.0.0", address(tokenImpl), "Initial security token implementation");
+        registry.registerImplementation("modular-compliance", "1.0.0", address(mcImpl), "Initial modular compliance implementation");
+        registry.registerImplementation("accredited-investor", "1.0.0", address(aiImpl), "Initial accredited investor module implementation");
+        registry.registerImplementation("insider-registry", "1.0.0", address(insiderRegImpl), "Initial insider registry implementation");
         
-        // Step 5: Configure implementation authority with factory
-        console.log("Step 5: Setting factory in implementation authority...");
-        TREXImplementationAuthority(implementationAuthority).setTREXFactory(factory);
+        // Step 4: Deploy the security token factory
+        console.log("Step 4: Deploying RefactoredSecurityTokenFactory...");
+        RefactoredSecurityTokenFactory factory = new RefactoredSecurityTokenFactory(address(registry));
         
-        // Step 6: Deploy a security token (optional)
+        // Step 5: Deploy and configure all compliance modules before token
+        console.log("Step 5: Deploying and configuring compliance modules...");
+        
+        // 5.1: Deploy InsiderRegistry module FIRST (since AccreditedInvestor depends on it)
+        console.log("Deploying InsiderRegistry module...");
+        address insiderRegImplAddress = registry.getImplementation("insider-registry", "1.0.0");
+        bytes memory insiderInitData = abi.encodeWithSelector(bytes4(keccak256("initialize()")));
+        ComplianceModuleProxy insiderRegistryProxy = new ComplianceModuleProxy(insiderRegImplAddress, insiderInitData);
+        address insiderRegistry = address(insiderRegistryProxy);
+        console.log("Deployed InsiderRegistry module at:", insiderRegistry);
+        
+        // The deployer is already an insider due to the initialize() function of InsiderRegistry
+        // which automatically adds the msg.sender (deployer) as an AGENT insider
+        console.log("Deployer added as insider during InsiderRegistry initialization");
+        
+        // 5.2: Deploy AccreditedInvestor module AFTER InsiderRegistry
+        console.log("Deploying AccreditedInvestor module...");
+        address aiImplAddress = registry.getImplementation("accredited-investor", "1.0.0");
+        bytes memory aiInitData = abi.encodeWithSelector(bytes4(keccak256("initialize()")));
+        ComplianceModuleProxy aiModuleProxy = new ComplianceModuleProxy(aiImplAddress, aiInitData);
+        address aiModule = address(aiModuleProxy);
+        console.log("Deployed AccreditedInvestor module at:", aiModule);
+        
+        // Configure AccreditedInvestor module with BOTH registries
+        console.log("Configuring AccreditedInvestor module...");
+        
+        // Set the Attribute Registry
+        console.log("- Setting Attribute Registry:", attributeRegistry);
+        AccreditedInvestor(aiModule).setAttributeRegistry(attributeRegistry);
+        
+        // Set the Insider Registry - THIS IS THE CRITICAL CONNECTION
+        console.log("- Setting Insider Registry:", insiderRegistry);
+        AccreditedInvestor(aiModule).setInsiderRegistry(insiderRegistry);
+        
+        // Enable insider exemption
+        console.log("- Setting insiders exempt from accreditation");
+        AccreditedInvestor(aiModule).setInsidersExemptFromAccreditation(true);
+        
+        console.log("AccreditedInvestor module fully configured with InsiderRegistry connection");
+        
+        // Step 6: Deploy a security token (FINAL STEP - after all modules are ready)
+        console.log("Step 6: Deploying security token...");
         string memory tokenName = vm.envString("TOKEN_NAME");
         string memory tokenSymbol = vm.envString("TOKEN_SYMBOL");
         uint8 tokenDecimals = uint8(vm.envUint("TOKEN_DECIMALS"));
         
-        console.log("Step 6: Deploying security token...");
         console.log(" - Name:", tokenName);
         console.log(" - Symbol:", tokenSymbol);
         console.log(" - Decimals:", tokenDecimals);
-        console.log(" - Factory:", factory);
+        console.log(" - Factory:", address(factory));
         console.log(" - Attribute Registry:", attributeRegistry);
         
         // Generate a unique salt based on name and symbol
         string memory salt = string(abi.encodePacked(tokenName, "-", tokenSymbol, "-", block.timestamp));
         
-        // Create an empty array for compliance modules
-        address[] memory emptyModules = new address[](0);
+        // Create array with the compliance module(s)
+        address[] memory modules = new address[](1);
+        modules[0] = aiModule;
         
-        // Deploy token directly
-        SecurityTokenFactory(factory).deployToken(
+        // Deploy token with configured modules
+        factory.deployToken(
             salt,
             tokenName,
             tokenSymbol,
             tokenDecimals,
             deployer, // Setting actual deployer as owner
             attributeRegistry,
-            emptyModules
+            modules,  // Using our pre-configured module
+            "1.0.0",  // Token version
+            "1.0.0"   // Compliance version
         );
         
         // Get the token address
-        address token = SecurityTokenFactory(factory).getToken(salt);
+        address token = factory.getToken(salt);
         console.log("Token deployed at:", token);
         
-        // Configure token compliance
-        console.log("Configuring token compliance...");
-        address complianceAddress = address(SecurityToken(token).compliance());
+        // Get Compliance address
+        address complianceAddress = address(IToken(token).compliance());
         console.log("Token compliance is at:", complianceAddress);
-        
-        // Configure token compliance
-        ModularCompliance compliance = ModularCompliance(complianceAddress);
-        console.log("\n=== Debug compliance binding ===");
-        console.log("Compliance contract:", complianceAddress);
-        
-        // Transfer ownership of all modules to the deployer
-        console.log("Transferring modules ownership to deployer...");
-        try AccreditedInvestor(aiModule).owner() returns (address owner) {
-            console.log("Current AccreditedInvestor owner:", owner);
-        } catch {
-            console.log("Failed to get AccreditedInvestor owner");
-        }
-        
-        // Check if compliance binding works directly
-        try IComplianceModule(aiModule).isComplianceBound(complianceAddress) returns (bool isBound) {
-            console.log("Is compliance already bound to AccreditedInvestor module?", isBound);
-        } catch {
-            console.log("Failed to check if compliance is bound to AccreditedInvestor");
-        }
-        
-        // Try adding modules using try/catch to debug issue
-        console.log("\nAdding modules to compliance...");
-        // First try to add modules
-        try compliance.addModule(aiModule) {
-            console.log("Successfully added AccreditedInvestor module");
-        } catch Error(string memory reason) {
-            console.log("Failed to add AccreditedInvestor module:", reason);
-        } catch {
-            console.log("Failed to add AccreditedInvestor module (unknown error)");
-        }
-        
-        try compliance.addModule(lockupModule) {
-            console.log("Successfully added Lockup module");
-        } catch Error(string memory reason) {
-            console.log("Failed to add Lockup module:", reason);
-        } catch {
-            console.log("Failed to add Lockup module (unknown error)");
-        }
-        
-        // Now try to initialize modules
-        console.log("\nInitializing modules...");
-        bytes memory aiInitData = abi.encodeWithSelector(
-            AccreditedInvestor(aiModule).initializeModule.selector,
-            complianceAddress
-        );
-        
-        try compliance.callModuleFunction(aiInitData, aiModule) {
-            console.log("AccreditedInvestor module initialized");
-        } catch Error(string memory reason) {
-            console.log("Failed to initialize AccreditedInvestor module:", reason);
-        } catch {
-            console.log("Failed to initialize AccreditedInvestor module (unknown error)");
-        }
-        
-        bytes memory lockupInitData = abi.encodeWithSelector(
-            bytes4(keccak256("initializeModule(address)")),
-            complianceAddress
-        );
-        
-        try compliance.callModuleFunction(lockupInitData, lockupModule) {
-            console.log("Lockup module initialized");
-        } catch Error(string memory reason) {
-            console.log("Failed to initialize Lockup module:", reason);
-        } catch {
-            console.log("Failed to initialize Lockup module (unknown error)");
-        }
-        
-        // Add debug information about InsiderRegistry
-        console.log("\nInsider Registry configured at:", insiderRegistry);
         
         // Mint initial supply if specified
         uint256 initialSupply = vm.envUint("INITIAL_SUPPLY");
         if (initialSupply > 0) {
-            // Debug insider status before minting
-            console.log("\n=== Debug Minting ===");
-            console.log("Script address (msg.sender):", msg.sender);
-            console.log("Original caller (tx.origin):", tx.origin);
-            console.log("Actual deployer address:", deployer);
-            console.log("InsiderRegistry address:", insiderRegistry);
-            
-            // Check if actual deployer is an insider
-            bool isDeployerInsider = IInsiderRegistry(insiderRegistry).isInsider(deployer);
-            console.log("Is actual deployer an insider in registry?", isDeployerInsider);
-            
-            if (isDeployerInsider) {
-                uint8 insiderType = IInsiderRegistry(insiderRegistry).getInsiderType(deployer);
-                console.log("Actual deployer insider type:", insiderType);
-                
-                // Check if actual deployer is an AGENT type insider
-                bool isDeployerAgent = (insiderType == uint8(IInsiderRegistry.InsiderType.AGENT));
-                console.log("Is actual deployer an AGENT type insider?", isDeployerAgent);
-            } else {
-                console.log("Actual deployer is not an insider, so not an AGENT");
-            }
-            
-            // Also check other addresses for comparison
-            bool isMsgSenderInsider = IInsiderRegistry(insiderRegistry).isInsider(msg.sender);
-            console.log("Is msg.sender an insider in registry?", isMsgSenderInsider);
-            
-            bool isTxOriginInsider = IInsiderRegistry(insiderRegistry).isInsider(tx.origin);
-            console.log("Is tx.origin an insider in registry?", isTxOriginInsider);
-            
-            // Check if InsiderRegistry is properly set in AccreditedInvestor
-            address registeredInsiderRegistry = address(AccreditedInvestor(aiModule).insiderRegistry());
-            console.log("Insider registry in AccreditedInvestor:", registeredInsiderRegistry);
-            
-            // Check the exemption flag
-            bool exemptionEnabled = AccreditedInvestor(aiModule).insidersExemptFromAccreditation();
-            console.log("Are insiders exempt from accreditation?", exemptionEnabled);
-            
-            // Check if module is initialized for compliance
-            console.log("Compliance address:", complianceAddress);
-            
-            // Check if moduleCheck passes directly in AccreditedInvestor for actual deployer
-            try AccreditedInvestor(aiModule).moduleCheck(address(0), deployer, 1, complianceAddress) returns (bool result) {
-                console.log("AccreditedInvestor.moduleCheck for actual deployer result:", result);
-            } catch Error(string memory reason) {
-                console.log("AccreditedInvestor.moduleCheck for actual deployer failed with reason:", reason);
-            } catch {
-                console.log("AccreditedInvestor.moduleCheck for actual deployer failed with unknown error");
-            }
-            
-            // Check if deployer is considered accredited by the module
-            try AccreditedInvestor(aiModule).isAccreditedInvestor(deployer) returns (bool result) {
-                console.log("Is actual deployer considered accredited?", result);
-            } catch Error(string memory reason) {
-                console.log("isAccreditedInvestor check for actual deployer failed with reason:", reason);
-            } catch {
-                console.log("isAccreditedInvestor check for actual deployer failed with unknown error");
-            }
-            
-            // Check compliance's canTransfer function for actual deployer
-            try ModularCompliance(complianceAddress).canTransfer(address(0), deployer, 1) returns (bool result) {
-                console.log("Can transfer to actual deployer according to compliance?", result);
-            } catch Error(string memory reason) {
-                console.log("canTransfer check for actual deployer failed with reason:", reason);
-            } catch {
-                console.log("canTransfer check for actual deployer failed with unknown error");
-            }
-            
-            // Get the target address to mint tokens to directly from environment
-            address mintToAddress = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266; // Default to this address
-            console.log("Minting to hardcoded address:", mintToAddress);
-            
-            // Try minting to specific address
-            try SecurityToken(token).mint(mintToAddress, initialSupply * (10 ** tokenDecimals)) {
+            try IToken(token).mint(deployer, initialSupply * (10 ** tokenDecimals)) {
                 console.log("Initial supply minted successfully:", initialSupply);
-                console.log("Minted to:", mintToAddress);
             } catch Error(string memory reason) {
-                console.log("Minting to address failed with reason:", reason);
-                console.log("To mint tokens later, ensure the receiver has the required attributes");
-                console.log("Then use token.mint(address, amount) as token owner or agent");
-                
-                // Add additional debugging info for the mint target address
-                console.log("\nExtra debugging:");
-                bool isInsider = IInsiderRegistry(insiderRegistry).isInsider(mintToAddress);
-                console.log("Is mint address an insider?", isInsider);
-                try AccreditedInvestor(aiModule).isAccreditedInvestor(mintToAddress) returns (bool result) {
-                    console.log("Is mint address considered accredited?", result);
-                } catch {
-                    console.log("Failed to check if mint address is accredited");
-                }
-                
-                // Check if we can register the mint address as an insider
-                try InsiderRegistry(insiderRegistry).addInsider(mintToAddress, uint8(IInsiderRegistry.InsiderType.AGENT)) {
-                    console.log("Added mint address as insider");
-                    try SecurityToken(token).mint(mintToAddress, initialSupply * (10 ** tokenDecimals)) {
-                        console.log("Second mint attempt successful!");
-                    } catch {
-                        console.log("Second mint attempt failed even after adding as insider");
-                    }
-                } catch {
-                    console.log("Failed to add mint address as insider");
-                }
+                console.log("Minting failed with reason:", reason);
             } catch {
-                console.log("Minting to address failed with unknown error");
-                console.log("To mint tokens later, ensure the receiver has the required attributes");
-                console.log("Then use token.mint(address, amount) as token owner or agent");
+                console.log("Minting failed with unknown error");
             }
         }
         
         // Log deployment summary
         console.log("\n=== Deployment Summary ===");
-        console.log("Token Implementation:", tokenImpl);
-        console.log("Modular Compliance Implementation:", mcImpl);
-        console.log("Implementation Authority:", implementationAuthority);
+        console.log("Version Registry:", address(registry));
+        console.log("Token Implementation:", address(tokenImpl));
+        console.log("Modular Compliance Implementation:", address(mcImpl));
+        console.log("AccreditedInvestor Implementation:", address(aiImpl));
+        console.log("InsiderRegistry Implementation:", address(insiderRegImpl));
+        console.log("Security Token Factory:", address(factory));
         console.log("AccreditedInvestor Module:", aiModule);
-        console.log("Lockup Module:", lockupModule);
-        console.log("Insider Registry:", insiderRegistry);
-        console.log("Security Token Factory:", factory);
+        console.log("InsiderRegistry Module:", insiderRegistry);
         console.log("Attribute Registry:", attributeRegistry);
         console.log("Deployed Token:", token);
+        console.log("Token Compliance:", complianceAddress);
         
         vm.stopBroadcast();
     }

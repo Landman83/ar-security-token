@@ -89,6 +89,30 @@ interface IComplianceModule {
     function moduleCheck(address _from, address _to, uint256 _value, address _compliance) external view returns (bool);
 
     /**
+     *  @dev New method for checking transfer compliance that can modify state if needed
+     *  This function is used to check if the transfer is allowed by the module and update any necessary state
+     *  This function can be called only on a compliance contract that is bound to the module
+     *  @param from address of the transfer sender
+     *  @param to address of the transfer receiver
+     *  @param amount amount of tokens sent
+     *  @param compliance address of the compliance contract concerned by the transfer action
+     *  the function returns TRUE if the module allows the transfer, FALSE otherwise
+     */
+    function checkTransferCompliance(
+        address from,
+        address to,
+        uint256 amount,
+        address compliance
+    ) external returns (bool);
+
+    /**
+     *  @dev Initialize the module with specific compliance settings
+     *  This function is called after binding to set up any module-specific configuration
+     *  @param compliance Address of the compliance contract
+     */
+    function initializeModule(address compliance) external;
+
+    /**
      *  @dev getter for compliance binding status on module
      *  @param _compliance address of the compliance contract
      */

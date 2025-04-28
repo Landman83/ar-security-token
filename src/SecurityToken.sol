@@ -5,10 +5,11 @@ pragma solidity ^0.8.17;
 import "./interfaces/IToken.sol";
 import "./storage/TokenStorage.sol";
 import "./roles/AgentRoleUpgradeable.sol";
+import "./proxy/SecurityTokenImplementation.sol";
 import "st-identity-registry/src/interfaces/IAttributeRegistry.sol";
 import "st-identity-registry/src/libraries/Attributes.sol";
 
-contract SecurityToken is IToken, AgentRoleUpgradeable, TokenStorage {
+contract SecurityToken is IToken, SecurityTokenImplementation, AgentRoleUpgradeable, TokenStorage {
 
     /// modifiers
 
@@ -37,7 +38,7 @@ contract SecurityToken is IToken, AgentRoleUpgradeable, TokenStorage {
      *  emits an `AttributeRegistryAdded` event
      *  emits a `ComplianceAdded` event
      */
-    function init(
+    function initialize(
         address _attributeRegistry,
         address _compliance,
         string memory _name,
@@ -46,11 +47,10 @@ contract SecurityToken is IToken, AgentRoleUpgradeable, TokenStorage {
         // _onchainID can be zero address if not set, can be set later by owner
         address _onchainID
     ) external initializer {
-        // that require is protecting legacy versions of TokenProxy contracts
-        // as there was a bug with the initializer modifier on these proxies
-        // that check is preventing attackers to call the init functions on those
-        // legacy contracts.
-        require(owner() == address(0), "already initialized");
+        // Use the implementation's initialization
+        __SecurityTokenImplementation_init(_TOKEN_VERSION, "security-token");
+        __AgentRole_init();
+        
         require(
             _attributeRegistry != address(0)
             && _compliance != address(0)
@@ -60,7 +60,7 @@ contract SecurityToken is IToken, AgentRoleUpgradeable, TokenStorage {
             && keccak256(abi.encode(_symbol)) != keccak256(abi.encode(""))
         , "invalid argument - empty string");
         require(0 <= _decimals && _decimals <= 18, "decimals between 0 and 18");
-        __Ownable_init(msg.sender);
+        
         _tokenName = _name;
         _tokenSymbol = _symbol;
         _tokenDecimals = _decimals;

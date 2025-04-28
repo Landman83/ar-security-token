@@ -2,18 +2,18 @@
 pragma solidity ^0.8.17;
 
 import "forge-std/Script.sol";
-import "../../src/SecurityTokenFactory.sol";
+import "../../src/RefactoredSecurityTokenFactory.sol";
 
 /**
  * @title DeployFactoryScript
- * @dev Deploys the SecurityTokenFactory
+ * @dev Deploys the RefactoredSecurityTokenFactory
  */
 contract DeployFactoryScript is Script {
-    function run(address implementationAuthority) public returns (address) {
-        // Deploy SecurityTokenFactory
-        console.log("Deploying SecurityTokenFactory...");
-        SecurityTokenFactory factory = new SecurityTokenFactory(implementationAuthority);
-        console.log("SecurityTokenFactory deployed at:", address(factory));
+    function run(address versionRegistry) public returns (address) {
+        // Deploy RefactoredSecurityTokenFactory
+        console.log("Deploying RefactoredSecurityTokenFactory...");
+        RefactoredSecurityTokenFactory factory = new RefactoredSecurityTokenFactory(versionRegistry);
+        console.log("RefactoredSecurityTokenFactory deployed at:", address(factory));
 
         // Transfer ownership to the caller
         factory.transferOwnership(msg.sender);

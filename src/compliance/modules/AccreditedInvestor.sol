@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.17;
 
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "./AbstractModuleUpgradeable.sol"; // ERC-3643 base module
+import "../../proxy/BaseComplianceModule.sol"; // New base module
 import "../../interfaces/IToken.sol"; // T-REX Token interface
 import "../../interfaces/IModularCompliance.sol"; // Modular Compliance interface
 import "../../interfaces/IInsiderRegistry.sol"; // Insider Registry interface
@@ -14,7 +13,7 @@ import "st-identity-registry/src/libraries/Attributes.sol"; // Standard attribut
  * @dev Prohibits transfers and mints to wallets that do not have the ACCREDITED_INVESTOR attribute set to true.
  * Allows exemptions for registered insiders when configured.
  */
-contract AccreditedInvestor is AbstractModuleUpgradeable {
+contract AccreditedInvestor is BaseComplianceModule {
     // Registry that tracks accredited investor statuses
     IAttributeRegistry public attributeRegistry;
     
@@ -41,11 +40,11 @@ contract AccreditedInvestor is AbstractModuleUpgradeable {
 
     // Initialize for upgradeable proxy
     function initialize() external initializer {
-        __AbstractModule_init();
+        __BaseComplianceModule_init("1.0.0");
     }
     
     // Initialize the module for a specific compliance 
-    function initializeModule(address _compliance) external onlyComplianceCall {
+    function initializeModule(address _compliance) external override onlyBoundComplianceParam(_compliance) {
         require(!_initialized[_compliance], "module already initialized");
         _initialized[_compliance] = true;
         emit ModuleInitialized(_compliance);
@@ -112,9 +111,32 @@ contract AccreditedInvestor is AbstractModuleUpgradeable {
      * @dev Checks if a transfer is compliant
      * @param _from The address of the sender
      * @param _to The address of the receiver
-     * @param _value The amount being transferred
+     * @param _amount The amount being transferred
      * @param _compliance The address of the compliance contract
      * @return bool True if the transfer is compliant
+     */
+    function checkTransferCompliance(
+        address _from,
+        address _to,
+        uint256 _amount,
+        address _compliance
+    ) external view override onlyBoundComplianceParam(_compliance) returns (bool) {
+        // Only need to check the recipient's accreditation for non-zero transfers
+        if (_amount == 0) {
+            return true;
+        }
+        
+        // Allow burns (transfers to address 0)
+        if (_to == address(0)) {
+            return true;
+        }
+        
+        // All recipients must be accredited investors or exempt insiders
+        return isAccreditedInvestor(_to);
+    }
+    
+    /**
+     * @dev Legacy moduleCheck implementation for compatibility
      */
     function moduleCheck(
         address _from,
@@ -132,29 +154,34 @@ contract AccreditedInvestor is AbstractModuleUpgradeable {
             return true;
         }
         
+        // Check if compliance is bound
+        if (!this.isComplianceBound(_compliance)) {
+            return false;
+        }
+        
         // All recipients must be accredited investors or exempt insiders
         return isAccreditedInvestor(_to);
     }
     
     /**
-     * @dev No action required on transfer
+     * @dev No action required on transfer - needed for legacy IComplianceModule interface
      */
-    function moduleTransferAction(address, address, uint256) external onlyComplianceCall {}
+    function moduleTransferAction(address, address, uint256) external override onlyBoundCompliance {}
     
     /**
-     * @dev No action required on mint
+     * @dev No action required on mint - needed for legacy IComplianceModule interface
      */
-    function moduleMintAction(address, uint256) external onlyComplianceCall {}
+    function moduleMintAction(address, uint256) external override onlyBoundCompliance {}
     
     /**
-     * @dev No action required on burn
+     * @dev No action required on burn - needed for legacy IComplianceModule interface
      */
-    function moduleBurnAction(address, uint256) external onlyComplianceCall {}
+    function moduleBurnAction(address, uint256) external override onlyBoundCompliance {}
     
     /**
      * @dev Always return true for compliance binding compatibility
      */
-    function canComplianceBind(address /*_compliance*/) external view override returns (bool) {
+    function canComplianceBind(address) external pure override returns (bool) {
         return true;
     }
     
