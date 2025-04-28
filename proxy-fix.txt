@@ -1,0 +1,498 @@
+Let me expand on these ideas with a more comprehensive proposal for a cleaner proxy architecture from scratch.
+
+  Modern Security Token Proxy Architecture
+
+  Core Principles
+
+  1. Simplicity over Complexity: Each component has a single responsibility
+  2. Independent Upgrades: Components should be upgraded independently
+  3. Standards Adherence: Follow established patterns (OpenZeppelin, EIPs)
+  4. Explicit Dependencies: Clear relationships between components
+  5. Separation of Concerns: Distinct boundaries between management, implementation, and proxies
+
+  Proposed Architecture
+
+  1. Eliminate the Implementation Authority
+
+  The Implementation Authority creates unnecessary complexity and tight coupling. Instead:
+
+  - Each proxy directly references its implementation
+  - A registry tracks available implementations for discovery
+  - Proxies use well-established patterns (UUPS or Transparent)
+
+  2. Core Components
+
+  Registry Contract
+
+  /// @title SecurityTokenRegistry
+  /// @notice Central registry for security token versions and implementations
+  contract SecurityTokenRegistry {
+      // Governance controls
+      address public governance;
+      address public pendingGovernance;
+
+      // Version tracking
+      struct Implementation {
+          address implementation;
+          uint256 timestamp;
+          string metadata;
+          bool deprecated;
+      }
+
+      // Component name => version => implementation details
+      mapping(string => mapping(string => Implementation)) public implementations;
+
+      // Events
+      event ImplementationRegistered(string component, string version, address implementation);
+      event ImplementationDeprecated(string component, string version);
+      event GovernanceTransferred(address indexed previousGovernance, address indexed newGovernance);
+
+      modifier onlyGovernance() {
+          require(msg.sender == governance, "Registry: caller is not governance");
+          _;
+      }
+
+      constructor() {
+          governance = msg.sender;
+      }
+
+      /// @notice Register a new implementation
+      function registerImplementation(
+          string calldata component,
+          string calldata version,
+          address implementation,
+          string calldata metadata
+      ) external onlyGovernance {
+          require(implementation != address(0), "Registry: implementation cannot be zero address");
+          require(bytes(component).length > 0, "Registry: component name cannot be empty");
+          require(bytes(version).length > 0, "Registry: version cannot be empty");
+
+          implementations[component][version] = Implementation({
+              implementation: implementation,
+              timestamp: block.timestamp,
+              metadata: metadata,
+              deprecated: false
+          });
+
+          emit ImplementationRegistered(component, version, implementation);
+      }
+
+      /// @notice Deprecate an implementation
+      function deprecateImplementation(string calldata component, string calldata version)
+          external onlyGovernance
+      {
+          require(implementations[component][version].implementation != address(0),
+              "Registry: implementation does not exist");
+
+          implementations[component][version].deprecated = true;
+
+          emit ImplementationDeprecated(component, version);
+      }
+
+      /// @notice Get implementation address by component and version
+      function getImplementation(string calldata component, string calldata version)
+          external view returns (address)
+      {
+          return implementations[component][version].implementation;
+      }
+
+      /// @notice Check if implementation is deprecated
+      function isDeprecated(string calldata component, string calldata version)
+          external view returns (bool)
+      {
+          return implementations[component][version].deprecated;
+      }
+
+      // Governance transition
+      function transferGovernance(address _newGovernance) external onlyGovernance {
+          require(_newGovernance != address(0), "Registry: new governance cannot be zero address");
+          pendingGovernance = _newGovernance;
+      }
+
+      function acceptGovernance() external {
+          require(msg.sender == pendingGovernance, "Registry: only pending governance");
+          emit GovernanceTransferred(governance, pendingGovernance);
+          governance = pendingGovernance;
+          pendingGovernance = address(0);
+      }
+  }
+
+  UUPSProxy for Compliance Modules
+
+  /// @title UUPSComplianceModuleProxy
+  /// @notice UUPS Proxy for compliance modules with better context preservation
+  contract UUPSComplianceModuleProxy {
+      /// @dev Storage slot for implementation address (EIP-1967)
+      bytes32 private constant IMPLEMENTATION_SLOT =
+          0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
+
+      constructor(address _implementation, bytes memory _initData) {
+          _updateImplementation(_implementation);
+
+          if (_initData.length > 0) {
+              (bool success, ) = _implementation.delegatecall(_initData);
+              if (!success) {
+                  assembly {
+                      let ptr := mload(0x40)
+                      let size := returndatasize()
+                      returndatacopy(ptr, 0, size)
+                      revert(ptr, size)
+                  }
+              }
+          }
+      }
+
+      /// @dev Delegates execution to the implementation contract
+      fallback() external payable {
+          address implementation = _getImplementation();
+
+          assembly {
+              // Copy msg.data. We take full control of memory in this inline assembly
+              // block because it will not return to Solidity code.
+              calldatacopy(0, 0, calldatasize())
+
+              // Call the implementation with perfect context preservation
+              let result := delegatecall(gas(), implementation, 0, calldatasize(), 0, 0)
+
+              // Copy the returned data
+              returndatacopy(0, 0, returndatasize())
+
+              switch result
+              case 0 { revert(0, returndatasize()) }
+              default { return(0, returndatasize()) }
+          }
+      }
+
+      receive() external payable {}
+
+      /// @dev Get current implementation
+      function _getImplementation() private view returns (address implementation) {
+          assembly {
+              implementation := sload(IMPLEMENTATION_SLOT)
+          }
+      }
+
+      /// @dev Update implementation
+      function _updateImplementation(address newImplementation) private {
+          require(newImplementation != address(0), "Implementation cannot be zero address");
+          require(Address.isContract(newImplementation), "Implementation must be a contract");
+
+          assembly {
+              sstore(IMPLEMENTATION_SLOT, newImplementation)
+          }
+      }
+  }
+
+  Modular Factory
+
+  /// @title SecurityTokenFactory
+  /// @notice Factory for deploying security token ecosystem components
+  contract SecurityTokenFactory {
+      SecurityTokenRegistry public immutable registry;
+
+      constructor(address _registry) {
+          registry = SecurityTokenRegistry(_registry);
+      }
+
+      /// @notice Deploy a complete security token ecosystem
+      function deploySecurityToken(
+          string calldata name,
+          string calldata symbol,
+          uint8 decimals,
+          string calldata tokenVersion,
+          string calldata complianceVersion
+      ) external returns (address token, address compliance) {
+          // Deploy modular compliance
+          compliance = deployModularCompliance(complianceVersion);
+
+          // Deploy security token
+          token = deployTokenWithCompliance(
+              name,
+              symbol,
+              decimals,
+              compliance,
+              tokenVersion
+          );
+
+          return (token, compliance);
+      }
+
+      /// @notice Deploy a compliance module
+      function deployComplianceModule(
+          string calldata moduleType,
+          string calldata version,
+          bytes calldata initData
+      ) public returns (address) {
+          address implementation = registry.getImplementation(moduleType, version);
+          require(implementation != address(0), "Factory: implementation not found");
+          require(!registry.isDeprecated(moduleType, version), "Factory: implementation deprecated");
+
+          UUPSComplianceModuleProxy proxy = new UUPSComplianceModuleProxy(
+              implementation,
+              initData
+          );
+
+          return address(proxy);
+      }
+
+      /// @notice Deploy modular compliance
+      function deployModularCompliance(string calldata version) public returns (address) {
+          address implementation = registry.getImplementation("modular-compliance", version);
+          require(implementation != address(0), "Factory: implementation not found");
+          require(!registry.isDeprecated("modular-compliance", version), "Factory: implementation deprecated");
+
+          bytes memory initData = abi.encodeWithSelector(bytes4(keccak256("initialize()")));
+
+          UUPSComplianceModuleProxy proxy = new UUPSComplianceModuleProxy(
+              implementation,
+              initData
+          );
+
+          return address(proxy);
+      }
+
+      /// @notice Deploy token with compliance
+      function deployTokenWithCompliance(
+          string calldata name,
+          string calldata symbol,
+          uint8 decimals,
+          address compliance,
+          string calldata version
+      ) public returns (address) {
+          address implementation = registry.getImplementation("security-token", version);
+          require(implementation != address(0), "Factory: implementation not found");
+          require(!registry.isDeprecated("security-token", version), "Factory: implementation deprecated");
+
+          bytes memory initData = abi.encodeWithSelector(
+              bytes4(keccak256("initialize(string,string,uint8,address)")),
+              name,
+              symbol,
+              decimals,
+              compliance
+          );
+
+          UUPSTokenProxy proxy = new UUPSTokenProxy(
+              implementation,
+              initData
+          );
+
+          return address(proxy);
+      }
+  }
+
+  3. Base Contract for Implementations
+
+  /// @title SecurityTokenImplementation
+  /// @notice Base contract for security token implementations to ensure UUPS compatibility
+  abstract contract SecurityTokenImplementation is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+      /// @notice Version identifier
+      string public version;
+
+      /// @dev Set version during initialization
+      function __SecurityTokenImplementation_init(string memory _version) internal onlyInitializing {
+          __Ownable_init();
+          __UUPSUpgradeable_init();
+          version = _version;
+      }
+
+      /// @dev Override authorization to upgrade the contract
+      function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+  }
+
+  4. Compliance Module Base
+
+  /// @title BaseComplianceModule
+  /// @notice Base contract for all compliance modules
+  abstract contract BaseComplianceModule is SecurityTokenImplementation {
+      /// @dev Store compliance binding state with clear error messages
+      mapping(address => bool) private _complianceBound;
+
+      /// @dev Event emitted when a compliance contract is bound to the module
+      event ComplianceBound(address indexed compliance);
+
+      /// @dev Event emitted when a compliance contract is unbound from the module
+      event ComplianceUnbound(address indexed compliance);
+
+      /// @dev Only bound compliance can call
+      modifier onlyBoundCompliance() {
+          require(_complianceBound[msg.sender], "Module: caller is not a bound compliance");
+          _;
+      }
+
+      /// @dev Check if compliance is bound
+      modifier onlyBoundComplianceParam(address compliance) {
+          require(_complianceBound[compliance], "Module: compliance not bound");
+          _;
+      }
+
+      /// @notice Bind a compliance contract to this module
+      /// @dev Only callable by the compliance contract itself
+      function bindCompliance(address compliance) external {
+          require(compliance != address(0), "Module: compliance cannot be zero address");
+          require(compliance == msg.sender, "Module: only compliance can bind itself");
+          require(!_complianceBound[compliance], "Module: compliance already bound");
+
+          _complianceBound[compliance] = true;
+          emit ComplianceBound(compliance);
+      }
+
+      /// @notice Unbind a compliance contract from this module
+      /// @dev Only callable by a bound compliance contract
+      function unbindCompliance(address compliance) external onlyBoundCompliance {
+          require(compliance == msg.sender, "Module: only bound compliance can unbind itself");
+
+          _complianceBound[compliance] = false;
+          emit ComplianceUnbound(compliance);
+      }
+
+      /// @notice Initialize the module with a specific compliance
+      /// @dev Optional step after binding
+      function initializeModule(address compliance) external onlyBoundComplianceParam(compliance) virtual {
+          // Implement initialization logic in derived contracts
+      }
+
+      /// @notice Check if a compliance contract is bound to this module
+      function isComplianceBound(address compliance) external view returns (bool) {
+          return _complianceBound[compliance];
+      }
+  }
+
+  5. Modular Compliance Implementation
+
+  /// @title ModularCompliance
+  /// @notice Implementation for modular compliance with proper module management
+  contract ModularCompliance is SecurityTokenImplementation {
+      /// @dev Token bound to this compliance
+      address private _token;
+
+      /// @dev List of compliance modules
+      address[] private _modules;
+
+      /// @dev Track if a module is bound
+      mapping(address => bool) private _moduleBound;
+
+      // Events
+      event ModuleAdded(address indexed module);
+      event ModuleRemoved(address indexed module);
+      event TokenBound(address indexed token);
+      event TokenUnbound(address indexed token);
+
+      /// @dev Only the bound token can call
+      modifier onlyToken() {
+          require(msg.sender == _token, "Compliance: caller is not the bound token");
+          _;
+      }
+
+      /// @notice Initialize the compliance contract
+      function initialize() external initializer {
+          __SecurityTokenImplementation_init("1.0.0");
+      }
+
+      /// @notice Bind a token to this compliance
+      function bindToken(address token) external {
+          require(token != address(0), "Compliance: token cannot be zero address");
+          require(_token == address(0) || owner() == msg.sender, "Compliance: only owner or initial token binding");
+
+          _token = token;
+          emit TokenBound(token);
+      }
+
+      /// @notice Unbind the token from this compliance
+      function unbindToken(address token) external {
+          require(token == _token, "Compliance: token is not bound");
+          require(msg.sender == token || msg.sender == owner(), "Compliance: only token or owner");
+
+          delete _token;
+          emit TokenUnbound(token);
+      }
+
+      /// @notice Add a compliance module
+      function addModule(address module) external onlyOwner {
+          require(module != address(0), "Compliance: module cannot be zero address");
+          require(!_moduleBound[module], "Compliance: module already bound");
+
+          // Bind the module to this compliance
+          IComplianceModule(module).bindCompliance(address(this));
+
+          // Add module to list
+          _modules.push(module);
+          _moduleBound[module] = true;
+
+          emit ModuleAdded(module);
+      }
+
+      /// @notice Remove a compliance module
+      function removeModule(address module) external onlyOwner {
+          require(_moduleBound[module], "Compliance: module not bound");
+
+          // Unbind the module
+          IComplianceModule(module).unbindCompliance(address(this));
+
+          // Remove from list (swap and pop)
+          for (uint256 i = 0; i < _modules.length; i++) {
+              if (_modules[i] == module) {
+                  _modules[i] = _modules[_modules.length - 1];
+                  _modules.pop();
+                  break;
+              }
+          }
+
+          delete _moduleBound[module];
+          emit ModuleRemoved(module);
+      }
+
+      /// @notice Call a function on a bound module
+      function callModuleFunction(bytes calldata callData, address module) external onlyOwner {
+          require(_moduleBound[module], "Compliance: module not bound");
+
+          // Call the module function
+          (bool success, bytes memory returnData) = module.call(callData);
+
+          if (!success) {
+              assembly {
+                  let ptr := mload(0x40)
+                  let size := returndatasize()
+                  returndatacopy(ptr, 0, size)
+                  revert(ptr, size)
+              }
+          }
+      }
+
+      /// @notice Check if a transfer is compliant
+      function canTransfer(address from, address to, uint256 amount) external view returns (bool) {
+          // Default to allowed if no modules
+          if (_modules.length == 0) return true;
+
+          // Check compliance with all modules
+          for (uint256 i = 0; i < _modules.length; i++) {
+              if (!IComplianceModule(_modules[i]).checkTransferCompliance(from, to, amount, address(this))) {
+                  return false;
+              }
+          }
+
+          return true;
+      }
+
+      // Other compliance functions...
+  }
+
+  Benefits Over Current Architecture
+
+  1. No Implementation Authority: Eliminates the extra indirection layer
+  2. Simpler Mental Model: Direct relationship between proxies and implementations
+  3. Transparent Registry: Registry serves as directory, not a control point
+  4. Better Error Handling: Detailed error messages and proper revert bubbling
+  5. Full Context Preservation: Improved proxy implementations that correctly preserve message context
+  6. Standards Compliance: Follows OpenZeppelin's UUPS pattern for upgrades
+  7. Independent Evolution: Components can evolve independently
+  8. Cleaner Initialization: Two-phase initialization for modules (bind then initialize)
+
+  Migration Strategy
+
+  1. Deploy new Registry and Factory
+  2. Register current implementations in the Registry
+  3. Deploy new components using the Factory
+  4. Bridge old and new systems through adapter contracts if needed
+
+  This approach eliminates the Implementation Authority completely, replacing it with a simpler Registry and directly upgradeble proxies. The result is a much cleaner, more maintainable system that follows       
+  established best practices for proxy design.

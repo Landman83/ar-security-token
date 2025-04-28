@@ -20,8 +20,8 @@ contract DeployModulesScript is Script {
             deployer = deployerAddr;
             console.log("Using deployer address from environment in module deployment:", deployer);
         } catch {
-            deployer = msg.sender; // Fallback to msg.sender if no environment variable
-            console.log("No DEPLOYER_ADDRESS set, using msg.sender as deployer in module deployment:", deployer);
+            deployer = tx.origin; // Use transaction origin as deployer if no environment variable
+            console.log("No DEPLOYER_ADDRESS set, using tx.origin as deployer in module deployment:", deployer);
         }
         // Deploy AccreditedInvestor Module
         console.log("Deploying AccreditedInvestor implementation...");
@@ -39,6 +39,7 @@ contract DeployModulesScript is Script {
         console.log("InsiderRegistry implementation deployed at:", address(irImplementation));
 
         // Prepare initialization data
+        console.log("Preparing module initialization data...");
         bytes memory aiInitData = abi.encodeWithSelector(AccreditedInvestor.initialize.selector);
         bytes memory lockupInitData = abi.encodeWithSelector(Lockup.initialize.selector);
         bytes memory irInitData = abi.encodeWithSelector(InsiderRegistry.initialize.selector);

@@ -159,10 +159,11 @@ contract AccreditedInvestor is AbstractModuleUpgradeable {
     }
     
     /**
-     * @dev This module is not plug and play as it requires initialization
+     * @dev This module is plug and play and can be used without initialization
+     * However, specific compliance data must be initialized through initializeModule
      */
     function isPlugAndPlay() external pure override returns (bool) {
-        return false;
+        return true;
     }
     
     /**

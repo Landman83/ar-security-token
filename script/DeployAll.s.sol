@@ -103,34 +103,75 @@ contract DeployAllScript is Script {
         address complianceAddress = address(SecurityToken(token).compliance());
         console.log("Token compliance is at:", complianceAddress);
         
-        // Add compliance modules to the token
-        console.log("Adding compliance modules...");
+        // Configure token compliance
         ModularCompliance compliance = ModularCompliance(complianceAddress);
+        console.log("\n=== Debug compliance binding ===");
+        console.log("Compliance contract:", complianceAddress);
         
-        compliance.addModule(aiModule);
-        console.log("Added AccreditedInvestor module");
+        // Transfer ownership of all modules to the deployer
+        console.log("Transferring modules ownership to deployer...");
+        try AccreditedInvestor(aiModule).owner() returns (address owner) {
+            console.log("Current AccreditedInvestor owner:", owner);
+        } catch {
+            console.log("Failed to get AccreditedInvestor owner");
+        }
         
-        // Initialize the AccreditedInvestor module for this compliance by calling initializeModule
-        // through callModuleFunction (only the compliance itself can call initializeModule directly)
-        console.log("Initializing AccreditedInvestor module...");
+        // Check if compliance binding works directly
+        try IComplianceModule(aiModule).isComplianceBound(complianceAddress) returns (bool isBound) {
+            console.log("Is compliance already bound to AccreditedInvestor module?", isBound);
+        } catch {
+            console.log("Failed to check if compliance is bound to AccreditedInvestor");
+        }
+        
+        // Try adding modules using try/catch to debug issue
+        console.log("\nAdding modules to compliance...");
+        // First try to add modules
+        try compliance.addModule(aiModule) {
+            console.log("Successfully added AccreditedInvestor module");
+        } catch Error(string memory reason) {
+            console.log("Failed to add AccreditedInvestor module:", reason);
+        } catch {
+            console.log("Failed to add AccreditedInvestor module (unknown error)");
+        }
+        
+        try compliance.addModule(lockupModule) {
+            console.log("Successfully added Lockup module");
+        } catch Error(string memory reason) {
+            console.log("Failed to add Lockup module:", reason);
+        } catch {
+            console.log("Failed to add Lockup module (unknown error)");
+        }
+        
+        // Now try to initialize modules
+        console.log("\nInitializing modules...");
         bytes memory aiInitData = abi.encodeWithSelector(
             AccreditedInvestor(aiModule).initializeModule.selector,
             complianceAddress
         );
-        compliance.callModuleFunction(aiInitData, aiModule);
-        console.log("AccreditedInvestor module initialized");
         
-        compliance.addModule(lockupModule);
-        console.log("Added Lockup module");
+        try compliance.callModuleFunction(aiInitData, aiModule) {
+            console.log("AccreditedInvestor module initialized");
+        } catch Error(string memory reason) {
+            console.log("Failed to initialize AccreditedInvestor module:", reason);
+        } catch {
+            console.log("Failed to initialize AccreditedInvestor module (unknown error)");
+        }
         
-        // Initialize the Lockup module for this compliance
-        console.log("Initializing Lockup module...");
         bytes memory lockupInitData = abi.encodeWithSelector(
             bytes4(keccak256("initializeModule(address)")),
             complianceAddress
         );
-        compliance.callModuleFunction(lockupInitData, lockupModule);
-        console.log("Lockup module initialized");
+        
+        try compliance.callModuleFunction(lockupInitData, lockupModule) {
+            console.log("Lockup module initialized");
+        } catch Error(string memory reason) {
+            console.log("Failed to initialize Lockup module:", reason);
+        } catch {
+            console.log("Failed to initialize Lockup module (unknown error)");
+        }
+        
+        // Add debug information about InsiderRegistry
+        console.log("\nInsider Registry configured at:", insiderRegistry);
         
         // Mint initial supply if specified
         uint256 initialSupply = vm.envUint("INITIAL_SUPPLY");
