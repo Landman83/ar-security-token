@@ -37,9 +37,14 @@ contract TokenStorage {
     /// @dev Mapping of registered STO contracts for quick lookup
     mapping(address => bool) internal _stoRegistry;
 
+    /// @dev EIP-2612 permit related storage
+    bytes32 internal _DOMAIN_SEPARATOR;
+    bytes32 internal constant _PERMIT_TYPEHASH = keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
+    mapping(address => uint256) internal _nonces;
+
     /**
      * @dev This empty reserved space is put in place to allow future versions to add new
      * variables without shifting down storage in the inheritance chain.
      */
-    uint256[49] private __gap;
+    uint256[46] private __gap; // Reduced from 49 to 46 to account for the 3 new variables
 }

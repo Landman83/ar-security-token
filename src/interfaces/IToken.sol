@@ -16,6 +16,40 @@ interface IToken {
     function allowance(address owner, address spender) external view returns (uint256);
     function approve(address spender, uint256 amount) external returns (bool);
     
+    // EIP-2612 permit extension
+    /**
+     * @dev Approve tokens by signature (EIP-2612)
+     * @param owner The owner of the tokens
+     * @param spender The address which will be approved to spend the tokens
+     * @param value The amount of tokens to be approved for spending
+     * @param deadline The timestamp until which the signature is valid
+     * @param v The recovery byte of the signature
+     * @param r The first 32 bytes of the signature
+     * @param s The second 32 bytes of the signature
+     */
+    function permit(
+        address owner,
+        address spender,
+        uint256 value,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external;
+
+    /**
+     * @dev Returns the current nonce for the given address
+     * @param owner Address to query nonce for
+     * @return Current nonce value
+     */
+    function nonces(address owner) external view returns (uint256);
+
+    /**
+     * @dev Returns the domain separator used in the encoding of the signature for permit
+     * @return Domain separator
+     */
+    function DOMAIN_SEPARATOR() external view returns (bytes32);
+    
     // Token extensions
     function name() external view returns (string memory);
     function symbol() external view returns (string memory);

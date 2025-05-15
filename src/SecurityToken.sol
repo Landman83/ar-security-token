@@ -68,6 +68,18 @@ contract SecurityToken is IToken, SecurityTokenImplementation, AgentRoleUpgradea
         _tokenPaused = true;
         setAttributeRegistry(_attributeRegistry);
         setCompliance(_compliance);
+        
+        // Initialize EIP-2612 domain separator
+        _DOMAIN_SEPARATOR = keccak256(
+            abi.encode(
+                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+                keccak256(bytes(_tokenName)),
+                keccak256(bytes(_TOKEN_VERSION)),
+                block.chainid,
+                address(this)
+            )
+        );
+        
         emit UpdatedTokenInformation(_tokenName, _tokenSymbol, _tokenDecimals, _TOKEN_VERSION, _tokenOnchainID);
     }
 
@@ -420,6 +432,72 @@ contract SecurityToken is IToken, SecurityTokenImplementation, AgentRoleUpgradea
      */
     function version() external pure override returns (string memory) {
         return _TOKEN_VERSION;
+    }
+    
+    /**
+     * @dev Implementation of the EIP-2612 permit function for approval via signature
+     * @param owner The address of the token owner
+     * @param spender The address of the spender to be approved
+     * @param value The amount of tokens to be approved
+     * @param deadline The timestamp until which the signature is valid
+     * @param v The recovery byte of the signature
+     * @param r The first 32 bytes of the signature
+     * @param s The second 32 bytes of the signature
+     */
+    function permit(
+        address owner,
+        address spender,
+        uint256 value,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external override {
+        require(deadline >= block.timestamp, "SecurityToken: permit expired");
+        
+        bytes32 structHash = keccak256(
+            abi.encode(
+                _PERMIT_TYPEHASH,
+                owner,
+                spender,
+                value,
+                _nonces[owner]++,
+                deadline
+            )
+        );
+        
+        bytes32 hash = _hashTypedDataV4(structHash);
+        
+        address signer = ecrecover(hash, v, r, s);
+        require(signer != address(0) && signer == owner, "SecurityToken: invalid signature");
+        
+        _approve(owner, spender, value);
+    }
+    
+    /**
+     * @dev Returns the current nonce for the given address
+     * @param owner Address to query nonce for
+     * @return Current nonce value
+     */
+    function nonces(address owner) external view override returns (uint256) {
+        return _nonces[owner];
+    }
+    
+    /**
+     * @dev Returns the domain separator used in the encoding of the signature for permit
+     * @return Domain separator
+     */
+    function DOMAIN_SEPARATOR() external view override returns (bytes32) {
+        return _DOMAIN_SEPARATOR;
+    }
+    
+    /**
+     * @dev Helper function for hashing EIP-712 typed data
+     * @param structHash The hash of the struct
+     * @return The EIP-712 typed data hash
+     */
+    function _hashTypedDataV4(bytes32 structHash) internal view returns (bytes32) {
+        return keccak256(abi.encodePacked("\x19\x01", _DOMAIN_SEPARATOR, structHash));
     }
 
     /**
